@@ -2,8 +2,9 @@ from typing import Annotated
 from fastapi import Depends
 
 from src.shared.dependencies.redis_deps import RedisDep
-from src.shared.dependencies.repository_deps import user_repository, project_repository, role_repository, link_repository, \
-    token_repository, task_repository
+from src.shared.dependencies.repository_deps import user_repository, project_repository, role_repository, \
+    link_repository, \
+    token_repository, task_repository, members_repository
 from src.shared.services.auth_service import AuthService
 from src.shared.services.link_service import LinkService
 from src.shared.services.project_service import ProjectService
@@ -23,8 +24,11 @@ async def get_user_service(redis: RedisDep, repository: user_repository) -> User
 
 user_service = Annotated[UserService, Depends(get_user_service)]
 
-async def get_project_service(redis: RedisDep, repository: project_repository) -> ProjectService:
-    return ProjectService(repository, redis)
+async def get_project_service(redis: RedisDep,
+                              p_repository: project_repository,
+                              r_repository: role_repository,
+                              m_repository: members_repository) -> ProjectService:
+    return ProjectService(p_repository, r_repository, m_repository, redis)
 
 project_service = Annotated[ProjectService, Depends(get_project_service)]
 

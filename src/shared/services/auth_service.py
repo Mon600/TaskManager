@@ -114,29 +114,6 @@ class AuthService:
         except Exception as e:
             print(f"Ошибка при декодировании токена: {e}")
             return None
-        # try:
-        #     data = await self.redis.get(refresh_token)
-        # except:
-        #     print("Ошибка подключения к Redis")
-        #     data = await self.tokens_repository.get_by_id(refresh_token)
-        #     data_schema = TokenModel.model_validate(data)
-        #     if data_schema.exp > datetime.datetime.now():
-        #         data = data_schema.token
-        #     else:
-        #         return None
-        # if not data is None:
-        #     try:
-        #         token_data = await decode_token(data)
-        #         if token_data['type'] == "refresh":
-        #             user_id = token_data['user_id']
-        #             access_token = await create_token({"user_id": user_id})
-        #             return access_token
-        #         return None
-        #     except Exception as e:
-        #         print(e)
-        #         return None
-        # else:
-        #     return None
 
 
     async def logout(self, refresh_token_id):

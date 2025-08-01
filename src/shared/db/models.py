@@ -113,7 +113,7 @@ class Task(Base):
     description: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     deadline: Mapped[Optional[date]] = mapped_column(Date())
-    completed_at: Mapped[Optional[date]] = mapped_column(Date(), nullable=True)
+    completed_at: Mapped[Optional[date]] = mapped_column(Date(), default=None, nullable=True)
     is_ended: Mapped[bool] = mapped_column(default=False)
     status: Mapped[TaskStatus] = mapped_column(default='processing')
     priority: Mapped[TaskPriority]

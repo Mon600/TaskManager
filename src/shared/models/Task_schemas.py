@@ -13,8 +13,7 @@ class EditableTaskData(BaseModel):
 
 class BaseTaskSchema(EditableTaskData):
     deadline: datetime.date
-    started_at: datetime.date
-    completed_at: datetime.date
+    started_at: datetime.datetime
     is_ended: bool
     project_id: int
 

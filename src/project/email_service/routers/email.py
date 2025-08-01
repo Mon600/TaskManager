@@ -13,7 +13,6 @@ router = APIRouter(prefix='/email', tags=['Email'])
 
 
 @router.post("/send")
-@Generate_token
 async def send_mail(request: Request,
                     user: current_user,
                     auth: auth_service,

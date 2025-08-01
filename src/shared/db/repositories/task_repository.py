@@ -1,10 +1,11 @@
 
-from sqlalchemy import select, update, delete
+from sqlalchemy import select, update, delete, asc, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.shared.db.models import Task, TaskAssignee, ProjectMember
 from src.shared.db.repositories.base_repository import BaseRepository
+from src.shared.models.FilterSchemas import TaskFilter, SortField, SortDirection
 
 
 class TaskRepository(BaseRepository):
@@ -32,13 +33,50 @@ class TaskRepository(BaseRepository):
             return False
 
     async def get_tasks(self , project_id):
-        stmt = (select(Task).where(Task.project_id == project_id).options(selectinload(Task.assignees_rel)
+        stmt = (select(Task).where(Task.project_id == project_id, Task.status == 'processing').options(selectinload(Task.assignees_rel)
                                                                           .load_only(TaskAssignee.project_member_id)
                                                                           .selectinload(TaskAssignee.project_member_rel)
                                                                                    .selectinload(ProjectMember.user_rel)))
         result = await self.session.execute(stmt)
         all_tasks = result.scalars().all()
         return all_tasks
+
+    async def get_filtered_tasks(self, project_id: int, filters: TaskFilter):
+        sorted_fields = {
+            SortField.STATUS: Task.status,
+            SortField.DEADLINE: Task.deadline,
+            SortField.PRIORITY: Task.priority,
+            SortField.CREATED: Task.started_at,
+        }
+        stmt = select(Task).where(Task.project_id == project_id)
+
+        if not filters.status is None:
+            stmt = stmt.where(Task.status.in_(filters.status))
+        if filters.priority:
+            stmt = stmt.where(Task.priority.in_(filters.priority))
+        if filters.deadline_after:
+            stmt = stmt.where(Task.deadline >= filters.deadline_after)
+        if filters.deadline_before:
+            stmt = stmt.where(Task.deadline <= filters.deadline_before)
+        if filters.created_after:
+            stmt = stmt.where(Task.started_at >= filters.created_after)
+        if filters.created_before:
+            stmt = stmt.where(Task.started_at <= filters.created_before)
+        if filters.sort_by:
+            if filters.sort_dir == SortDirection.ASC:
+                stmt = stmt.order_by(asc(sorted_fields[filters.sort_by]))
+            stmt = stmt.order_by(desc(sorted_fields[filters.sort_by]))
+        stmt = stmt.options(
+                            selectinload(Task.assignees_rel)
+                            .load_only(TaskAssignee.project_member_id)
+                            .selectinload(TaskAssignee.project_member_rel)
+                            .selectinload(ProjectMember.user_rel)
+        )
+        res = await self.session.execute(stmt)
+        return res.scalars().all()
+
+
+
 
     async def get_task(self, task_id:int):
         stmt = (select(Task)
@@ -95,10 +133,10 @@ class TaskRepository(BaseRepository):
 
 
 
-    async def update_task(self,task_id, data: dict):
+    async def update_task(self,task_id):
         stmt = (update(Task)
                 .where(Task.id == task_id)
-                .values(**data)
+                .values(status = 'completed')
                 .returning(Task.id,
                            Task.project_id,
                            Task.name,

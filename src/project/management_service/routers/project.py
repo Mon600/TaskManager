@@ -5,9 +5,7 @@ from starlette.responses import RedirectResponse, JSONResponse
 from src.shared.decorators.decorators import PermissionsChecker
 from src.shared.dependencies.user_deps import current_user
 from src.shared.models.Project_schemas import ProjectData, ProjectMemberExtend
-from src.shared.dependencies.service_deps import project_service, auth_service
-
-
+from src.shared.dependencies.service_deps import project_service, auth_service, task_service
 
 router = APIRouter(prefix="/project", tags=['Project',])
 
@@ -37,7 +35,7 @@ async def create_project(request: Request,
                          service: project_service,
                          data: ProjectData,
                          csrf_protect: CsrfProtect = Depends()):
-    await csrf_protect.validate_csrf(request)
+    # await csrf_protect.validate_csrf(request)
     try:
         project_id = await service.create_project(data, user['id'])
         return RedirectResponse(f"/project/{project_id}", status_code=302)
@@ -50,27 +48,29 @@ async def project_page(request: Request,
                        user: current_user,
                        auth: auth_service,
                        project: project_service,
+                       t_service: task_service,
                        project_id: int,
                        csrf_protect: CsrfProtect = Depends()
                        ):
 
     if user is None:
         return RedirectResponse("http://127.0.0.1:8002/auth/")
-    project_data = await project.get_project_info(project_id, 158022215)#user['id'])
+    project_data = await project.get_project_info(project_id, user['id'])
+    tasks = await  t_service.get_tasks(project_id)
     if project_data['member'] is None:
         raise HTTPException(status_code=404, detail="Not found")
 
     csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
-    context= {"request": request,
-               "project_data": project_data['project_info'],
+    context= {"project_data": project_data['project_info'],
                "member": project_data['member'],
                "project_id": project_id,
+               "tasks": tasks,
                "user": user,
                "title": project_data['project_info']['project']['name'],
                "csrf_token": csrf_token
                }
     response = JSONResponse(context)
-    csrf_protect.set_csrf_cookie(signed_token, response)
+    # csrf_protect.set_csrf_cookie(signed_token, response)
     return response
 
 

@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import Depends
 
 from src.shared.db.repositories.link_repository import LinkRepository
+from src.shared.db.repositories.project_member_repository import ProjectMemberRepository
 from src.shared.db.repositories.project_repository import ProjectRepository
 from src.shared.db.repositories.role_repository import RoleRepository
 from src.shared.db.repositories.task_repository import TaskRepository
@@ -45,3 +46,10 @@ async def get_task_repository(session: SessionDep) -> TaskRepository:
     return TaskRepository(session)
 
 task_repository = Annotated[TaskRepository, Depends(get_task_repository)]
+
+
+async def get_members_repository(session: SessionDep) -> ProjectMemberRepository:
+    return ProjectMemberRepository(session)
+
+
+members_repository = Annotated[ProjectMemberRepository, Depends(get_members_repository)]

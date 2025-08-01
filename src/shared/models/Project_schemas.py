@@ -33,7 +33,7 @@ class ProjectMemberExtend(ProjectMember):
 class ProjectDataGet(ProjectData):
     creator_user_id: int
     created_at: str
-    tasks_rel: list[TaskGetSchema]
+    # tasks_rel: list[TaskGetSchema]
 
 
     @field_validator('created_at', mode='before')

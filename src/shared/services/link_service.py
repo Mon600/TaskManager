@@ -1,6 +1,7 @@
 import datetime
 import json
 import secrets
+from typing import Optional, Dict, Any
 
 from asyncpg.pgproto.pgproto import timedelta
 from babel.dates import format_datetime
@@ -22,67 +23,72 @@ class LinkService:
         self.repository = repository
         self.redis = redis
 
-    async def generate(self, data: LinkSchema, project_id: int, user: dict):
+
+    @staticmethod
+    def _calculate_expiration(ex: int) -> tuple[Optional[datetime], Optional[str]]:
+        if ex >= 3600:
+            end_at = datetime.datetime.now() + timedelta(seconds=ex)
+            format_end_at = format_datetime(end_at, format='d MMMM, Y HH:mm', locale='ru')
+            return end_at, format_end_at
+        return None, "бессрочна"
+
+    @staticmethod
+    def _build_cache_data(project_data: dict, format_end_at: str) -> dict:
+        if format_end_at == "бессрочна":
+            return {"end_at": "бессрочна", "project_rel": project_data}
+        return GetLinkSchema.model_validate({
+            "end_at": format_end_at,
+            "project_rel": project_data
+        }).model_dump()
+
+    async def _save_to_redis(self, code: str, cached_data: dict, ex: int) -> None:
+        try:
+            ttl = ex if ex >= 3600 else 3600
+            await self.redis.set(code, json.dumps(cached_data), ex=ttl)
+        except Exception as e:
+            print(f"Redis недоступен: {e}")
+
+
+    async def generate(self, data: LinkSchema, project_id: int, user: dict) -> Optional[Dict[str, Any]]:
         user_id = user['id']
         try:
-            end_at = None
-            data_dict = {}
-            code = secrets.token_urlsafe(16)
-
             project = await self.p_repository.get_by_id(project_id)
+            if not project:
+                raise ValueError("Invalid project id")
+
             project_data = ProjectRel.model_validate(project).model_dump()
 
-            data_for_save = {"project_id": project_id, 'creator_id': user_id}
+            code = secrets.token_urlsafe(16)
 
-            if data.ex >= 3600:
-                end_at = datetime.datetime.now() + timedelta(seconds=data.ex)
-                format_end_at = format_datetime(end_at, format='d MMMM, Y HH:mm', locale='ru')
+            end_at, format_end_at = self._calculate_expiration(data.ex)
 
-                cached_data = (
-                    GetLinkSchema.model_validate(
-                        {
-                            "end_at": format_end_at,
-                            "project_rel": project_data
-                        }
-                    ).model_dump()
-                )
+            cached_data = self._build_cache_data(project_data, format_end_at)
 
-                try:
-                    await self.redis.set(code, json.dumps(cached_data), ex=data.ex)
-                except Exception as e:
-                    print(f"Redis недоступен: {e}")
-
-            else:
-                format_end_at = None
-                cached_data = {'end_at': 'бессрочна'}
-                cached_data.update({"project_rel": project_data})
-
-                try:
-                    await self.redis.set(code, json.dumps(cached_data), ex=3600)
-                except Exception as e:
-                    print(f'Redis недоступен: {e}')
-
-            data_for_save.update({"end_at": end_at, "link": code})
-            data_dict.update(data_for_save)
-
-            await self.repository.create(data_dict)
+            await self._save_to_redis(code, cached_data, data.ex)
 
             link = f"http://127.0.0.1:8000/project/invite/{code}"
+            data_for_save = {
+                "project_id": project_id,
+                "creator_id": user_id,
+                "end_at": end_at,
+                "link": code
+            }
+            await self.repository.create(data_for_save)
             record = History(
                 project_id=project_id,
                 user=user,
-                action=(LinkGenerateActionData(link=link))
+                action=LinkGenerateActionData(link=link)
             )
             await record.insert()
 
             return {
-                'link': link,
+                "link": link,
                 "ended_at": format_end_at
             }
-
         except Exception as e:
-            print(e)
+            print(f"Ошибка при генерации ссылки: {e}")
             return None
+
 
     async def get_project_by_code(self, code: str):
         try:

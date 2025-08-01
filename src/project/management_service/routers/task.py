@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Body
+from fastapi.params import Query
 from fastapi_csrf_protect import CsrfProtect
 from starlette.exceptions import HTTPException
 from starlette.requests import Request
@@ -8,6 +9,7 @@ from src.shared.db.models import TaskStatus
 from src.shared.decorators.decorators import PermissionsChecker
 from src.shared.dependencies.service_deps import auth_service, project_service, task_service
 from src.shared.dependencies.user_deps import current_user
+from src.shared.models.FilterSchemas import TaskFilter
 from src.shared.models.Task_schemas import TaskSchema, TaskSchemaExtend, TaskGetSchema
 from src.shared.ws.socket import sio
 
@@ -25,7 +27,7 @@ async def create_task(request: Request,
                       service: task_service,
                       csrf_protect: CsrfProtect = Depends(),
                       )-> TaskGetSchema:
-    await csrf_protect.validate_csrf(request)
+    # await csrf_protect.validate_csrf(request)
     res = await service.create_task(data)
     if res:
         await sio.emit('update_tasks_list', data=res, to=f'project_{project_id}')
@@ -88,15 +90,34 @@ async def get_task(request: Request,
     return task
 
 
+async def get_tasks():
+    pass
+
+@router.get('/project/{project_id}/get-filtered-tasks')
+async def get_tasks_with_filter(request: Request,
+                                user: current_user,
+                                auth: auth_service,
+                                project: project_service,
+                                project_id: int,
+                                service: task_service,
+                                filters: TaskFilter = Query()):
+    res = await service.get_filtered_tasks(project_id, filters)
+    if res:
+        return res
+    else:
+        raise HTTPException(status_code=404, detail="Not found")
+
+
+
+
 @router.put('/{task_id}/complete')
 async def set_task_status(request: Request,
                           user: current_user,
                           auth: auth_service,
                           project: project_service,
                           task_id: int,
-                          status: TaskStatus,
                           service: task_service):
-    updated_task = await service.change_status_task(task_id, status)
+    updated_task = await service.change_status_task(task_id)
     if updated_task:
         return updated_task
     else:

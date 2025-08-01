@@ -1,8 +1,11 @@
+import datetime
+
 from pymongo.asynchronous.database import AsyncDatabase
 
-from src.shared.db.models import TaskStatus
+from src.shared.db.models import TaskStatus, TaskPriority
 from src.shared.db.repositories.task_repository import TaskRepository
 from src.shared.models.Assigneed_schemas import AssigneesModel
+from src.shared.models.FilterSchemas import TaskFilter
 from src.shared.models.Task_schemas import TaskGetSchema, BaseTaskSchema, TaskSchema
 
 
@@ -14,6 +17,13 @@ class TaskService:
     async def get_tasks(self, project_id: int) -> list[TaskGetSchema]:
         all_tasks = await self.repository.get_tasks(project_id)
         res = [TaskGetSchema.model_validate(task).model_dump() for task in all_tasks]
+        return res
+
+    async def get_filtered_tasks(self,
+                                 project_id: int,
+                                 filters: TaskFilter):
+        tasks = await self.repository.get_filtered_tasks(project_id, filters)
+        res = [TaskGetSchema.model_validate(task).model_dump() for task in tasks]
         return res
 
 
@@ -58,11 +68,23 @@ class TaskService:
             return False
 
 
-    async def change_status_task(self, task_id, status: TaskStatus):
+    async def change_status_task(self, task_id):
         try:
-            res = await self.repository.update_task(task_id, {"status": status})
+            res = await self.repository.update_task(task_id)
             if res:
-                return BaseTaskSchema.model_validate(res)
+                keys = ['id',
+                        'project_id',
+                        'name',
+                        'description',
+                        'deadline',
+                        'started_at',
+                        'completed_at',
+                        'priority',
+                        'is_ended',
+                        'status']
+                result = dict(zip(keys, res))
+                print(result)
+                return BaseTaskSchema.model_validate(result)
             else:
                 return None
         except Exception as e:
