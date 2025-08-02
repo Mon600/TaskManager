@@ -1,3 +1,4 @@
+from typing import Dict, Any
 
 from sqlalchemy import select, update, delete, asc, desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,11 +33,16 @@ class TaskRepository(BaseRepository):
             print(f'Ошибка добавления записи в базу данных {e}')
             return False
 
-    async def get_tasks(self , project_id):
-        stmt = (select(Task).where(Task.project_id == project_id, Task.status == 'processing').options(selectinload(Task.assignees_rel)
-                                                                          .load_only(TaskAssignee.project_member_id)
-                                                                          .selectinload(TaskAssignee.project_member_rel)
-                                                                                   .selectinload(ProjectMember.user_rel)))
+    async def get_tasks(self , project_id: int, limit: int = 20, offset: int = 0):
+        stmt = (select(Task)
+                .where(Task.project_id == project_id, Task.status == 'processing')
+                .options(
+            selectinload(Task.assignees_rel)
+            .load_only(TaskAssignee.project_member_id)
+            .selectinload(TaskAssignee.project_member_rel)
+            .selectinload(ProjectMember.user_rel)
+        ).offset(offset).limit(limit)
+        )
         result = await self.session.execute(stmt)
         all_tasks = result.scalars().all()
         return all_tasks
@@ -99,14 +105,21 @@ class TaskRepository(BaseRepository):
             )
             result = await self.session.execute(member_check_stmt)
             existing_members = {row[0] for row in result.fetchall()}
+
             invalid_members = set(assignees) - existing_members
             if invalid_members:
                 raise ValueError(f"Users {list(invalid_members)} are not members of this project")
-        assignees_stmt = select(TaskAssignee.project_member_id).where(TaskAssignee.task_id == task_id)
+
+        assignees_stmt = select(TaskAssignee).where(TaskAssignee.task_id == task_id).options(
+                selectinload(TaskAssignee.project_member_rel)
+                .selectinload(ProjectMember.user_rel)
+            )
         res = await self.session.execute(assignees_stmt)
-        current_assignees = list(res.scalars().all())
-        data_to_add = set(assignees) - set(current_assignees)
-        data_to_delete =  list(set(current_assignees) - set(assignees))
+        old_assignees = res.scalars().all()
+        current_assignees_ids = set(assignee.project_member_id for assignee in old_assignees)
+        data_to_add = set(assignees) - current_assignees_ids
+        data_to_delete =  list(current_assignees_ids - set(assignees))
+
         if data_to_delete:
             delete_stmt = (delete(TaskAssignee)
                            .where(
@@ -115,10 +128,13 @@ class TaskRepository(BaseRepository):
                                   )
                            )
             await self.session.execute(delete_stmt)
+
         if data_to_add:
             assignees_list = [TaskAssignee(task_id=task_id, project_member_id=member_id) for member_id in data_to_add]
             self.session.add_all(assignees_list)
+
         await self.session.commit()
+
         final_assignees_stmt = (
             select(TaskAssignee)
             .where(TaskAssignee.task_id == task_id)
@@ -129,14 +145,27 @@ class TaskRepository(BaseRepository):
         )
         final_res = await self.session.execute(final_assignees_stmt)
         task_assignees = final_res.scalars().all()
-        return task_assignees
+        return {'new_assignees': task_assignees, 'old_assignees': old_assignees}
 
 
 
-    async def update_task(self,task_id):
+    async def update_task(self, task_id, data: Dict[str, Any]):
+        old_task_stmt = select(
+            Task.id,
+            Task.project_id,
+            Task.name,
+            Task.description,
+            Task.deadline,
+            Task.started_at,
+            Task.completed_at,
+            Task.priority,
+            Task.is_ended,
+            Task.status
+        ).where(Task.id == task_id)
+        old_task_res = await self.session.execute(old_task_stmt)
         stmt = (update(Task)
                 .where(Task.id == task_id)
-                .values(status = 'completed')
+                .values(**data)
                 .returning(Task.id,
                            Task.project_id,
                            Task.name,
@@ -151,4 +180,7 @@ class TaskRepository(BaseRepository):
 
         res = await self.session.execute(stmt)
         await self.session.commit()
-        return list(res.first())
+        return {
+            'new_task_data': list(res.first()),
+            'old_task_data': list(old_task_res.first())
+        }

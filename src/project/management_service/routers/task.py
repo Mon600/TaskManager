@@ -5,12 +5,13 @@ from starlette.exceptions import HTTPException
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from src.shared.db.models import TaskStatus
 from src.shared.decorators.decorators import PermissionsChecker
 from src.shared.dependencies.service_deps import auth_service, project_service, task_service
 from src.shared.dependencies.user_deps import current_user
 from src.shared.models.FilterSchemas import TaskFilter
-from src.shared.models.Task_schemas import TaskSchema, TaskSchemaExtend, TaskGetSchema
+from src.shared.models.Task_schemas import TaskSchema, TaskGetSchema, UpdateTaskSchema
+from src.shared.models.pagination import PaginationDep
+from src.shared.mongo.db.models import ChangeTaskActionData
 from src.shared.ws.socket import sio
 
 router = APIRouter(prefix='/tasks', tags=['Tasks'])
@@ -18,9 +19,7 @@ router = APIRouter(prefix='/tasks', tags=['Tasks'])
 
 @router.post('/project/{project_id}/create')
 @PermissionsChecker("create_tasks")
-async def create_task(request: Request,
-                      user: current_user,
-                      auth: auth_service,
+async def create_task(user: current_user,
                       project: project_service,
                       project_id: int,
                       data: TaskSchema,
@@ -40,27 +39,25 @@ async def create_task(request: Request,
 @PermissionsChecker("update_tasks")
 async def update_task(request: Request,
                       user: current_user,
-                      auth: auth_service,
                       project: project_service,
                       project_id: int,
                       task_id: int,
                       service: task_service,
-                      data = Body(),
+                      data: UpdateTaskSchema,
                       csrf_protect: CsrfProtect = Depends()
-                      ):
-    await csrf_protect.validate_csrf(request)
-    res = await service.update_task(data, task_id, project_id)
+                      ) -> ChangeTaskActionData:
+    # await csrf_protect.validate_csrf(request)
+    res = await service.update_task(data, task_id, project_id, user)
     if res:
-        await sio.emit('update_tasks_list', data=res, to=f'project_{project_id}')
-        return JSONResponse(content=res, status_code=200)
-    return JSONResponse({"ok": False}, status_code=500)
+        await sio.emit('update_tasks_list', data=res.new_data, to=f'project_{project_id}')
+        return res
+    return res
 
 
 @router.delete('/project/{project_id}/delete/{task_id}')
 @PermissionsChecker("delete_tasks")
 async def delete_task(request: Request,
                       user: current_user,
-                      auth: auth_service,
                       project: project_service,
                       project_id: int,
                       task_id:int,
@@ -76,13 +73,11 @@ async def delete_task(request: Request,
 
 @router.get('/project/{project_id}/get/{task_id}')
 @PermissionsChecker("update_tasks")
-async def get_task(request: Request,
-                      user: current_user,
-                      auth: auth_service,
-                      project: project_service,
-                      project_id: int,
-                      task_id:int,
-                      service: task_service) -> TaskGetSchema:
+async def get_task(user: current_user,
+                  project: project_service,
+                  project_id: int,
+                  task_id:int,
+                  service: task_service) -> TaskGetSchema:
     task = await service.get_task(task_id)
 
     if task is None:
@@ -94,9 +89,7 @@ async def get_tasks():
     pass
 
 @router.get('/project/{project_id}/get-filtered-tasks')
-async def get_tasks_with_filter(request: Request,
-                                user: current_user,
-                                auth: auth_service,
+async def get_tasks_with_filter(user: current_user,
                                 project: project_service,
                                 project_id: int,
                                 service: task_service,
@@ -108,12 +101,9 @@ async def get_tasks_with_filter(request: Request,
         raise HTTPException(status_code=404, detail="Not found")
 
 
-
-
 @router.put('/{task_id}/complete')
 async def set_task_status(request: Request,
                           user: current_user,
-                          auth: auth_service,
                           project: project_service,
                           task_id: int,
                           service: task_service):
@@ -123,3 +113,8 @@ async def set_task_status(request: Request,
     else:
         raise HTTPException(status_code=500, detail='Error')
 
+
+@router.get('/project/{project_id}/tasks')
+async def get_tasks(service: task_service, project_id: int, pagination: PaginationDep) -> list[TaskGetSchema]:
+    tasks = task_service.get_tasks(project_id, pagination.limit, pagination.offset)
+    return tasks

@@ -13,9 +13,7 @@ router = APIRouter(prefix='/roles', tags=['Roles'])
 
 @router.get('/project/{project_id}')
 @PermissionsChecker("change_roles")
-async def get_roles(request: Request,
-                   user: current_user,
-                   auth: auth_service,
+async def get_roles(user: current_user,
                    project: project_service,
                    project_id: int,
                    service: role_service) -> list[RoleSchemaWithId]:
@@ -28,9 +26,7 @@ async def get_roles(request: Request,
 
 @router.post("/project/{project_id}/new")
 @PermissionsChecker("change_roles")
-async def add_role(request: Request,
-                   user: current_user,
-                   auth: auth_service,
+async def add_role(user: current_user,
                    project: project_service,
                    project_id: int,
                    service: role_service,
@@ -48,7 +44,6 @@ async def add_role(request: Request,
 @PermissionsChecker("change_roles")
 async def update_role(request: Request,
                       user: current_user,
-                      auth: auth_service,
                       project: project_service,
                       project_id: int,
                       data: RoleSchema,
@@ -57,7 +52,7 @@ async def update_role(request: Request,
                       csrf_protect: CsrfProtect = Depends()):
     try:
         await csrf_protect.validate_csrf(request)
-        await service.role_update(role_id, data)
+        await service.role_update(role_id, data, user, project_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=e)
 
@@ -67,8 +62,7 @@ async def update_role(request: Request,
 @PermissionsChecker("change_roles")
 async def delete_role(request: Request,
                       user: current_user,
-                      auth: auth_service,
-                      proejct: project_service,
+                      project: project_service,
                       project_id: int,
                       role_id: int,
                       service: role_service,
@@ -84,7 +78,6 @@ async def delete_role(request: Request,
 @PermissionsChecker("change_roles")
 async def change_role(request: Request,
                       user: current_user,
-                      auth: auth_service,
                       project: project_service,
                       project_id: int,
                       member_id: int,
@@ -92,7 +85,8 @@ async def change_role(request: Request,
                       service: role_service,
                       csrf_protect: CsrfProtect = Depends()
                       ):
-    await csrf_protect.validate_csrf(request)
-    await service.new_member_role(member_id, project_id, role_id)
-
-
+    # await csrf_protect.validate_csrf(request)
+    res =  await service.new_member_role(member_id, project_id, role_id, user)
+    if res:
+        return res
+    return None

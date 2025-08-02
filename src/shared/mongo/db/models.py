@@ -23,6 +23,7 @@ class DeleteUserActionData(BaseActionData):
 
 class ChangeRoleActionData(BaseActionData):
     action_type: Literal["change_role"] = "change_role"
+    role_id: int
     old_data: Dict[str, Any]
     new_data: Dict[str, Any]
 
@@ -54,8 +55,8 @@ class LinkDeleteActionData(BaseActionData):
 class ChangeUserRoleActionData(BaseActionData):
     action_type: Literal["change_user_role"] = "change_user_role"
     changed_role_user: Dict[str, Any]
-    old_role: Dict[str, Any]
-    new_role: Dict[str, Any]
+    old_data: Dict[str, Any]
+    new_data: Dict[str, Any]
 
 
 class ChangeDefaultRoleData(BaseActionData):

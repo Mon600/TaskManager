@@ -1,5 +1,4 @@
-
-
+import logging
 import os
 
 from celery import Celery
@@ -11,6 +10,11 @@ from sqlalchemy.orm import DeclarativeBase
 from starlette.templating import Jinja2Templates
 
 load_dotenv()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 def get_db_url():
     return (f'postgresql+asyncpg://'

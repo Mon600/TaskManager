@@ -1,13 +1,8 @@
 from typing import Annotated, AsyncGenerator
 
-from beanie import init_beanie
-from fastapi import Depends, HTTPException
-from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
-from pymongo.asynchronous.database import AsyncDatabase
+from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.project.management_service.mongo.db.database import db
-from src.project.management_service.mongo.db.models import History
 from src.shared.config import async_session
 
 
@@ -22,5 +17,9 @@ async def get_session() -> AsyncGenerator:
             await session.close()
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
+
+
+
 
 

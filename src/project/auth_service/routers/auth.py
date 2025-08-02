@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response, JSONResponse
 
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/auth", tags=['Auth'])
 @router.get("/")
 async def login_page(request: Request, user: current_user):
     if user:
-        return RedirectResponse("http://127.0.0.1:8002/")
+        return RedirectResponse("http://127.0.0.1:8000/")
     context = {
                "title": "Вход",
                }
@@ -41,7 +41,6 @@ async def callback(request: Request, service: auth_service):
         user_id = res[0]
         tokens = await service.get_token(user_id)
 
-        # Устанавливаем куки
         response = JSONResponse({
             "success": True,
             "username": res[1],
@@ -65,7 +64,6 @@ async def callback(request: Request, service: auth_service):
             httponly=True,
             samesite="lax"
         )
-        # Редирект на frontend
         response.headers["Location"] = "http://localhost:3000/auth/success"
         response.status_code = 302  # Found
         return response

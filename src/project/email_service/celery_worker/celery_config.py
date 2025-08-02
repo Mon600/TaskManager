@@ -9,7 +9,7 @@ celery_app = Celery(
     "worker",
     broker="amqp://guest:guest@localhost:5672//",
     backend="rpc://",
-    include=['src.app.celery_worker.tasks']
+    include=['src.project.email_service.celery_worker.tasks']
 )
 
 

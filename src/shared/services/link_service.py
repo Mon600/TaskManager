@@ -5,22 +5,25 @@ from typing import Optional, Dict, Any
 
 from asyncpg.pgproto.pgproto import timedelta
 from babel.dates import format_datetime
-from pymongo.asynchronous.database import AsyncDatabase
 from redis.asyncio import Redis
 
-from src.project.management_service.mongo.db.models import History, LinkGenerateActionData, LinkDeleteActionData
 from src.shared.db.repositories.link_repository import LinkRepository
 from src.shared.db.repositories.project_repository import ProjectRepository
 from src.shared.models.Link_schemas import LinkSchema, GetLinkSchema
 from src.shared.models.Project_schemas import ProjectRel
-from src.shared.models.User_schema import UserSchema
-
+from src.shared.mongo.db.models import LinkDeleteActionData, LinkGenerateActionData
+from src.shared.mongo.repositories.mongo_repositroy import MongoRepository
 
 
 class LinkService:
-    def __init__(self, repository: LinkRepository, p_repository: ProjectRepository, redis: Redis):
+    def __init__(self,
+                 repository: LinkRepository,
+                 p_repository: ProjectRepository,
+                 mongo: MongoRepository,
+                 redis: Redis):
         self.p_repository = p_repository
         self.repository = repository
+        self.mongo = mongo
         self.redis = redis
 
 
@@ -74,12 +77,10 @@ class LinkService:
                 "link": code
             }
             await self.repository.create(data_for_save)
-            record = History(
-                project_id=project_id,
-                user=user,
-                action=LinkGenerateActionData(link=link)
-            )
-            await record.insert()
+
+            action = LinkGenerateActionData(link=link)
+
+            await self.mongo.add_to_db(action, project_id, user)
 
             return {
                 "link": link,
@@ -113,14 +114,12 @@ class LinkService:
 
     async def delete_all_links(self, project_id, user):
         try:
-            await self.repository.delete_all_links(project_id)
-            record = History(
-                project_id=project_id,
-                user=user,
-                action=LinkDeleteActionData(
-                    is_all=True))
-            await record.insert()
-            return True
+            res = await self.repository.delete_all_links(project_id)
+            if res:
+                action = LinkDeleteActionData(is_all=True)
+                await self.mongo.add_to_db(action, project_id, user)
+                return True
+            return False
         except Exception as e:
             print(f"Ошибка {e}")
             return False
@@ -129,13 +128,11 @@ class LinkService:
     async def delete_link_by_code(self, link_code: str, user: dict):
         try:
             project_id = await self.repository.delete_by_code(link_code)
-            record = History(
-                project_id=project_id,
-                user=user,
-                action=LinkDeleteActionData(
-                    link=link_code))
-            await record.insert()
-            return True
+            if project_id:
+                action = LinkDeleteActionData(link=link_code)
+                await self.mongo.add_to_db(action, project_id, user)
+                return True
+            return False
         except Exception as e:
             print(f"Ошибка {e}")
             return False

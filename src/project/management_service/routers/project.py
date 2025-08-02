@@ -13,7 +13,6 @@ router = APIRouter(prefix="/project", tags=['Project',])
 @router.get("/create")
 async def create_project(request: Request,
                          user: current_user,
-                         auth: auth_service,
                          csrf_protect: CsrfProtect = Depends()):
     if user is None:
         return RedirectResponse("http://127.0.0.1:8002/auth")
@@ -44,9 +43,7 @@ async def create_project(request: Request,
 
 
 @router.get("/{project_id}")
-async def project_page(request: Request,
-                       user: current_user,
-                       auth: auth_service,
+async def project_page(user: current_user,
                        project: project_service,
                        t_service: task_service,
                        project_id: int,
@@ -78,7 +75,6 @@ async def project_page(request: Request,
 @PermissionsChecker("update_project")
 async def edit_project(request: Request,
                      user: current_user,
-                     auth: auth_service,
                      project: project_service,
                      project_id: int,
                      new_data: ProjectData,
@@ -92,7 +88,6 @@ async def edit_project(request: Request,
 @router.get("/{project_id}/members")
 async def get_members(request: Request,
                       user: current_user,
-                      auth: auth_service,
                       project: project_service,
                       project_id: int) -> list[ProjectMemberExtend]:
     members = await project.get_project_members(project_id)
@@ -105,7 +100,6 @@ async def get_members(request: Request,
 @PermissionsChecker('manage_roles')
 async def update_default_role(request: Request,
                               user: current_user,
-                              auth: auth_service,
                               project: project_service,
                               project_id: int,
                               role_id: int) -> JSONResponse:
@@ -120,7 +114,6 @@ async def update_default_role(request: Request,
 @PermissionsChecker('delete_users')
 async def delete_member_from_project(request: Request,
                                       user: current_user,
-                                      auth: auth_service,
                                       project: project_service,
                                       project_id: int,
                                       member_id: int,

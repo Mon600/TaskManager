@@ -4,7 +4,6 @@ from starlette.background import BackgroundTask
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, JSONResponse
 from src.project.email_service.celery_worker.tasks import send_mail_task
-from src.shared.decorators.decorators import Generate_token
 from src.shared.dependencies.service_deps import user_service, auth_service
 from src.shared.dependencies.user_deps import current_user
 

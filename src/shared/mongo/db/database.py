@@ -1,9 +1,9 @@
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from beanie import init_beanie
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
-from src.project.management_service.mongo.db.models import History
+from src.shared.mongo.db.models import History, BaseActionData
 
 
 class Database:
@@ -19,6 +19,8 @@ class Database:
             database=self.db,
             document_models=[History]
         )
+
+
 
 
 

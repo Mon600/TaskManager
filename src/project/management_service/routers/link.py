@@ -15,9 +15,7 @@ router = APIRouter(prefix='/links', tags=['Links'])
 
 @router.post('/{project_id}/generate')
 @PermissionsChecker('generate_url')
-async def generate_url(request: Request,
-                       auth: auth_service,
-                      user: current_user,
+async def generate_url(user: current_user,
                       project: project_service,
                       service: link_service,
                       data: LinkSchema,
@@ -32,7 +30,6 @@ async def generate_url(request: Request,
 
 @router.get('/invite/{code}')
 async def invite_page(request: Request,
-                      auth: auth_service,
                       user: current_user,
                       service: link_service,
                       code: str):
@@ -52,9 +49,7 @@ async def invite_page(request: Request,
     return JSONResponse(context)
 
 @router.post('/invite/{code}/accept')
-async def accept_invite(request: Request,
-                        auth: auth_service,
-                        user: current_user,
+async def accept_invite(user: current_user,
                         p_service: project_service,
                         l_service: link_service,
                         code: str
@@ -71,9 +66,7 @@ async def accept_invite(request: Request,
 
 
 @router.get('/{project_id}/links')
-async def project_links(request: Request,
-                        auth: auth_service,
-                        user: current_user,
+async def project_links(user: current_user,
                         service: link_service,
                         project_id: int
                         ) -> list[GetLinksSchema]:
@@ -84,9 +77,7 @@ async def project_links(request: Request,
 
 
 @router.delete("/{project_id}/clear")
-async def delete_all_links(request: Request,
-                           auth: auth_service,
-                           user: current_user,
+async def delete_all_links(user: current_user,
                            service: link_service,
                            project_id: int
                            ):
@@ -97,9 +88,7 @@ async def delete_all_links(request: Request,
         return JSONResponse({'ok': False}, status_code=500)
 
 @router.delete('/{link_code}/delete')
-async def delete_link_by_code(request: Request,
-                              auth: auth_service,
-                              user: current_user,
+async def delete_link_by_code(user: current_user,
                               service: link_service,
                               link_code: str):
     result = await service.delete_link_by_code(link_code, user)

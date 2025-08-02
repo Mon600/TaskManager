@@ -11,6 +11,10 @@ class EditableTaskData(BaseModel):
     status: str
 
 
+class UpdateTaskSchema(EditableTaskData):
+    assignees: List[int] = Field(default_factory=list)
+
+
 class BaseTaskSchema(EditableTaskData):
     deadline: datetime.date
     started_at: datetime.datetime
@@ -46,7 +50,6 @@ class TaskSchema(BaseTaskSchema):
 
 
 class TaskSchemaExtend(TaskSchema):
-
     id: int
 
 
