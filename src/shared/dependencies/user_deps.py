@@ -1,4 +1,5 @@
 import json
+import logging
 
 from fastapi.params import Depends
 from typing import Annotated
@@ -8,31 +9,54 @@ from starlette.responses import RedirectResponse
 
 from src.shared.dependencies.redis_deps import RedisDep
 
-from src.shared.dependencies.service_deps import auth_service
+from src.shared.dependencies.service_deps import auth_service, project_service
 from src.shared.jwt.jwt import decode_token
+from src.shared.schemas.Role_schemas import RoleSchema
+from src.shared.schemas.User_schema import UserSchema
+
+logger = logging.getLogger(__name__)
 
 
-
-async def get_current_user(request: Request, service: auth_service, redis: RedisDep):
+async def get_current_user(request: Request, service: auth_service, redis: RedisDep) -> UserSchema | None:
+    if hasattr(request.state, 'current_user'):
+        return request.state.current_user
     token = request.cookies.get('access_token')
-    print(token)
     if token:
         payload = await decode_token(token)
         try:
             user_info = await redis.get(f"current_user{payload['user_id']}")
-            res = json.loads(user_info)
-            return res
+            user_dict = json.loads(user_info)
+            user_schema = UserSchema.model_validate(user_dict)
+            request.state.current_user = user_schema
+            return user_schema
         except:
-            user = await service.get_user_data(payload['user_id'])
-            if user:
+            user_db = await service.get_user_data(payload['user_id'])
+            if user_db:
+                user_schema = UserSchema.model_validate(user_db)
                 try:
-                    await redis.set(f"current_user{payload['user_id']}", json.dumps(user), ex=3600)
-                except Exception as e:
-                    print(f"Redis недоступен: {e}")
-                return user
+                    cached = await redis.get(f"current_user{payload['user_id']}")
+                    if not cached:
+                        await redis.set(f"current_user{payload['user_id']}", user_schema.model_dump_json(), ex=3600)
+                except redis.exceptions.ConnectionError as e:
+                    logger.warning(f"Redis недоступен: {e}")
+                return user_schema
             else:
-                return RedirectResponse('/auth')
+                return None
     else:
         return None
 
-current_user = Annotated[str, Depends(get_current_user)]
+current_user = Annotated[UserSchema, Depends(get_current_user)]
+
+
+async def get_user_role(project_id: int,
+                        user: current_user,
+                        service: project_service) -> RoleSchema | None:
+
+    project_member = await service.is_user_project_member(project_id, user.id)
+    if project_member is None:
+        return None
+    return project_member.role_rel
+
+
+user_role = Annotated[RoleSchema, Depends(get_user_role)]
+

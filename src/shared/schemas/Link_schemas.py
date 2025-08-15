@@ -4,7 +4,7 @@ from types import NoneType
 from babel.dates import format_datetime
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from src.shared.models.Project_schemas import ProjectRel
+from src.shared.schemas.Project_schemas import ProjectRel
 
 
 

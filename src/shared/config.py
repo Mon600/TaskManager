@@ -1,13 +1,12 @@
 import logging
 import os
 
-from celery import Celery
 from dotenv import load_dotenv
 
 from pydantic_settings import BaseSettings
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
-from starlette.templating import Jinja2Templates
+
 
 load_dotenv()
 
@@ -45,8 +44,7 @@ async def get_auth_data():
         "expire_refresh": int(os.getenv("REFRESH_TOKEN_EXPIRE_MINUTES"))
     }
 
-
-async def get_middleware_secret():
+def get_middleware_secret():
     return os.getenv('MIDDLEWARE_SECRET')
 
 class Base(DeclarativeBase):
@@ -54,7 +52,7 @@ class Base(DeclarativeBase):
 
 
 class CsrfConfig(BaseSettings):
-  secret_key: str = "3cy8kXHijHDsORojUHQ0eOyVCbu7dzbiRwgwBy4ugy67CTYJvuErSVDy3EX2PDiO"
+  secret_key: str = os.getenv("CSRF_SECRET")
   token_key: str = "csrf_token"
   header_name: str = "X-CSRFToken"
 

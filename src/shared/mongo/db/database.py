@@ -21,8 +21,4 @@ class Database:
         )
 
 
-
-
-
-
 db = Database()

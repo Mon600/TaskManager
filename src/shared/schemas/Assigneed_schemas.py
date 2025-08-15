@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict
 
-from src.shared.models.User_schema import UserSchema
+from src.shared.schemas.User_schema import UserSchema
 
 
 class AssigneesProjectMember(BaseModel):

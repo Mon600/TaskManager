@@ -5,9 +5,9 @@ from sqlalchemy import pool
 
 from alembic import context
 
-from shared.config import get_db_url, Base
+from src.shared.config import get_db_url, Base
 
-from shared.db.models import User
+from src.shared.db.models import User
 
 config = context.config
 
@@ -19,8 +19,6 @@ if config.config_file_name is not None:
 
 
 target_metadata = User.metadata
-
-
 
 
 def run_migrations_offline() -> None:

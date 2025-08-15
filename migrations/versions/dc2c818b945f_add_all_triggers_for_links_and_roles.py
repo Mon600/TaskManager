@@ -10,7 +10,7 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-from shared.db.triggers import TriggersManager
+from src.shared.db.triggers import TriggersManager
 
 # revision identifiers, used by Alembic.
 revision: str = 'dc2c818b945f'

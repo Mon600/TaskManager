@@ -6,7 +6,8 @@ from sqlalchemy.orm import selectinload
 
 from src.shared.db.models import Role, ProjectMember
 from src.shared.db.repositories.base_repository import BaseRepository
-
+from src.shared.schemas.Project_schemas import ProjectMemberExtend
+from src.shared.schemas.Role_schemas import RoleSchema
 
 
 class RoleRepository(BaseRepository):
@@ -30,6 +31,10 @@ class RoleRepository(BaseRepository):
         old_data_stmt = select(Role).where(Role.id == role_id)
         old_data_res = await self.session.execute(old_data_stmt)
         old_data = old_data_res.scalars().one_or_none()
+        if not old_data is None:
+            old_data_dict = RoleSchema.model_validate(old_data).model_dump()
+            if old_data_dict == new_data:
+                raise ValueError("Old data and new data the same")
 
         stmt = update(Role).where(Role.id == role_id).values(**new_data)
         await self.session.execute(stmt)
@@ -48,7 +53,10 @@ class RoleRepository(BaseRepository):
                             )
                         )
         res_old_data = await self.session.execute(old_data_stmt)
-        old_data =  res_old_data.scalars().one_or_none()
+        old_data = res_old_data.scalars().one_or_none()
+        old_data_dict = ProjectMemberExtend.model_validate(old_data)
+        if old_data_dict.role_id == role_id:
+            raise ValueError("Old role and new role the same")
         stmt = (update(ProjectMember)
                  .where(
                         ProjectMember.project_id == project_id,

@@ -8,6 +8,11 @@ from beanie import Document
 from pydantic import BaseModel, Field
 from datetime import datetime
 
+from pymongo import IndexModel
+
+from src.shared.schemas.Project_schemas import ProjectMemberExtend
+from src.shared.schemas.User_schema import UserSchema
+
 
 class BaseActionData(BaseModel):
     action_type: str
@@ -15,9 +20,20 @@ class BaseActionData(BaseModel):
     description: Optional[str] = None
 
 
+    @model_validator(mode="before")
+    @classmethod
+    def validate_action_data(cls, data: Union[Dict[str, Any], Any]) -> Union[Dict[str, Any], Any]:
+        if isinstance(data, dict) and 'new_data' in data.keys() and 'old_data' in data.keys():
+            old_data = data.get('old_data', None)
+            new_data = data.get('new_data', None)
+            if old_data == new_data and (not old_data is None and not new_data is None):
+                raise ValueError("old_data and new_data cannot be identical for change actions")
+        return data
+
+
 class DeleteUserActionData(BaseActionData):
     action_type: Literal["delete_user"] = "delete_user"
-    deleted_user: Dict[str, Any]
+    deleted_user: ProjectMemberExtend
     reason: str = ""
 
 
@@ -47,7 +63,7 @@ class LinkDeleteActionData(BaseActionData):
     @classmethod
     def validate(cls, data: Union[Dict[str, Any], Any]) -> Union[Dict[str, Any], Any]:
         if isinstance(data, dict):
-            if (data.get('is_all', False) and data['link']) or (not data.get('is_all', False) and not data['link']):
+            if (data.get('is_all', False) and data.get('link')) or (not data.get('is_all', False) and not data.get('link')):
                 raise ValueError("You can delete one OR all links.")
         return data
 
@@ -77,7 +93,7 @@ class UserJoinActionData(BaseActionData):
 
 class History(Document):
     project_id: int
-    user: Dict[str, Any]
+    user: UserSchema
     action: Union[
         DeleteUserActionData,
         ChangeRoleActionData,
@@ -110,5 +126,7 @@ class History(Document):
             "project_id",
             "user.id"
             "action.action_type",
-            "timestamp"
+            "timestamp",
+            IndexModel([('created_at', 1)],
+                       expireAfterSeconds=3600*48)
         ]

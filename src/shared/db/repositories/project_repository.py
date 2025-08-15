@@ -7,6 +7,7 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from src.shared.db.models import Project, ProjectMember, Role, Task, TaskAssignee
 from src.shared.db.repositories.base_repository import BaseRepository
+from src.shared.schemas.Project_schemas import ProjectData
 
 
 class ProjectRepository(BaseRepository):
@@ -26,30 +27,48 @@ class ProjectRepository(BaseRepository):
 
 
     async def new_project(self, data: dict, user_id: int) -> bool:
-        try:
-            project = Project(**data, creator_user_id=user_id, default_role_id=None)
-            self.session.add(project)
-            await self.session.flush()
-            owner_role = Role(**self.owner_permissions, project_id=project.id, name="Создатель", priority=10)
-            self.session.add(owner_role)
-            default_role = Role(project_id=project.id, name="Пользователь")
-            self.session.add(default_role)
-            await self.session.flush()
-            project.default_role_id = default_role.id
-            self.session.add(project)
-            project_member = ProjectMember(
-                user_id=user_id,
-                project_id=project.id,
-                role_id=owner_role.id
-            )
-            self.session.add(project_member)
-            await self.session.commit()
-            return project.id
-        except Exception as e:
-            self.loger.warn(e)
-            await self.session.rollback()
-            return False
+        project = Project(**data, creator_user_id=user_id)
+        self.session.add(project)
+        await self.session.flush()
+        owner_role = Role(**self.owner_permissions, project_id=project.id, name="Создатель", priority=10)
+        self.session.add(owner_role)
+        default_role = Role(project_id=project.id, name="Пользователь")
+        self.session.add(default_role)
+        await self.session.flush()
+        project.default_role_id = default_role.id
+        self.session.add(project)
+        project_member = ProjectMember(
+            user_id=user_id,
+            project_id=project.id,
+            role_id=owner_role.id
+        )
+        self.session.add(project_member)
+        await self.session.commit()
+        return project.id
 
+
+
+    async def get_projects_by_user_id(self, user_id):
+        # selectinload(ProjectMember.user_rel)
+        stmt = select(ProjectMember).where(ProjectMember.user_id == user_id).options(
+            selectinload(ProjectMember.project_rel)
+            )
+
+        member_count_subq = (
+            select(
+                ProjectMember.project_id,
+                func.count(ProjectMember.user_id).label("member_count")
+            )
+            .group_by(ProjectMember.project_id)
+            .subquery()
+        )
+
+        stmt = stmt.join(
+            member_count_subq,
+            ProjectMember.project_id == member_count_subq.c.project_id
+        ).add_columns(member_count_subq.c.member_count)
+        res = await self.session.execute(stmt)
+        return res.all()
 
     async def get_project_info(self, project_id: int):
         try:
@@ -112,21 +131,21 @@ class ProjectRepository(BaseRepository):
 
 
     async def update_project(self, project_id: int, new_data: dict):
-        old_data_stmt = (select(Project.id,
-                                Project.name,
-                                Project.description,
-                                Project.status)
+        old_data_stmt = (select(Project)
                          .where(Project.id == project_id)
                          )
         old_data = await self.session.execute(old_data_stmt)
-        old_data_list = list(old_data.one())
+        old_data_res = old_data.scalars().one_or_none()
+        old_data_dict = ProjectData.model_validate(old_data_res).model_dump()
+        if old_data_dict == new_data:
+            raise ValueError('Old data and new data the same')
         stmt = (update(Project)
                 .where(Project.id == project_id)
                 .values(**new_data)
                 )
         await self.session.execute(stmt)
         await self.session.commit()
-        return old_data_list
+        return old_data_dict
 
 
     async def get_members(self, project_id: int):

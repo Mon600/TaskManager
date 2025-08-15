@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.db.models import User
 from src.shared.db.repositories.base_repository import BaseRepository
-from src.shared.models.User_schema import UserSchema
+from src.shared.schemas.User_schema import UserSchema
 
 
 class UserRepository(BaseRepository):

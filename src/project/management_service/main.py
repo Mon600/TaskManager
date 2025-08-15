@@ -1,20 +1,26 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 import socketio
 import uvicorn
-from fastapi import FastAPI
+from alembic.command import history
+from fastapi import FastAPI, Depends
 
 from fastapi_csrf_protect import CsrfProtect
+from redis.asyncio import Redis
 from starlette.middleware.cors import CORSMiddleware
 
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse, JSONResponse
 
+from src.shared.dependencies.redis_deps import RedisDep, get_redis
 from src.shared.mongo.db.database import db
 from src.project.management_service.routers.project import router as project_router
 from src.project.management_service.routers.link import router as link_router
 from src.project.management_service.routers.role import router as role_router
 from src.project.management_service.routers.task import router as task_router
+from src.project.management_service.routers.history import router as history_router
+from src.project.management_service.routers.broker_router import router as broker
 from src.shared.config import CsrfConfig, origins, get_middleware_secret
 
 from src.shared.dependencies.service_deps import project_service
@@ -35,7 +41,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-
 socketio_app = socketio.ASGIApp(sio, other_asgi_app=app)
 
 
@@ -52,6 +57,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 app.add_middleware(RefreshTokenMiddleware)
 
 
@@ -61,19 +67,21 @@ app.include_router(project_router)
 app.include_router(task_router)
 app.include_router(link_router)
 app.include_router(role_router)
+app.include_router(history_router)
+app.include_router(broker)
 
 @app.get("/")
 async def main_page(user: current_user,
-                    project: project_service):
+                    service: project_service):
     if user is None:
         return RedirectResponse("http://127.0.0.1:8002/auth")
-    projects = await project.get_projects_by_user_id(user['id'])
+    projects = await service.get_projects_by_user_id(user.id)
     context = {
         "user": user,
         "projects": projects
     }
 
-    return JSONResponse(context)
+    return context
 
 
 if __name__ == "__main__":

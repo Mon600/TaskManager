@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from fastapi import Depends
+from faststream import Depends as Depends_fs
 
 from src.shared.db.repositories.link_repository import LinkRepository
 from src.shared.db.repositories.project_member_repository import ProjectMemberRepository
@@ -9,7 +10,7 @@ from src.shared.db.repositories.role_repository import RoleRepository
 from src.shared.db.repositories.task_repository import TaskRepository
 from src.shared.db.repositories.token_repository import TokenRepository
 from src.shared.db.repositories.user_repository import UserRepository
-from src.shared.dependencies.db_deps import SessionDep
+from src.shared.dependencies.db_deps import SessionDep, get_session
 from src.shared.mongo.repositories.mongo_repositroy import MongoRepository
 
 

@@ -51,7 +51,7 @@ class Project(Base):
     status: Mapped[ProjectStatus]
     created_at: Mapped[created_at]
     default_role_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey('roles.id', ondelete="RESTRICT"), nullable=False)
+        ForeignKey('roles.id', ondelete="RESTRICT"), nullable=True)
     creator_rel: Mapped["User"] = relationship(back_populates="owned_projects_rel")
     tasks_rel: Mapped[list['Task']] = relationship(back_populates='project_rel', order_by="Task.started_at.desc()")
     project_members_rel: Mapped[list["ProjectMember"]] = relationship(back_populates="project_rel")
@@ -60,6 +60,7 @@ class Project(Base):
     default_role_rel: Mapped[Optional["Role"]] = relationship(
         foreign_keys=[default_role_id],
         post_update=True,
+
     )
 
 
@@ -101,7 +102,6 @@ class Role(Base):
     __table_args__ = (
         CheckConstraint("priority <= 10 AND priority >= 1", name="check_priority_range"),
     )
-
 
 
 class Task(Base):

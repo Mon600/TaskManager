@@ -1,18 +1,22 @@
 import datetime
 import json
+import logging
 import secrets
 from typing import Optional, Dict, Any
 
+import redis.exceptions
 from asyncpg.pgproto.pgproto import timedelta
 from babel.dates import format_datetime
 from redis.asyncio import Redis
+from sqlalchemy.exc import SQLAlchemyError
 
 from src.shared.db.repositories.link_repository import LinkRepository
 from src.shared.db.repositories.project_repository import ProjectRepository
-from src.shared.models.Link_schemas import LinkSchema, GetLinkSchema
-from src.shared.models.Project_schemas import ProjectRel
+from src.shared.schemas.Link_schemas import LinkSchema, GetLinkSchema
+from src.shared.schemas.Project_schemas import ProjectRel
 from src.shared.mongo.db.models import LinkDeleteActionData, LinkGenerateActionData
 from src.shared.mongo.repositories.mongo_repositroy import MongoRepository
+from src.shared.schemas.User_schema import UserSchema
 
 
 class LinkService:
@@ -25,6 +29,7 @@ class LinkService:
         self.repository = repository
         self.mongo = mongo
         self.redis = redis
+        self.logger = logging.getLogger(__name__)
 
 
     @staticmethod
@@ -48,23 +53,20 @@ class LinkService:
         try:
             ttl = ex if ex >= 3600 else 3600
             await self.redis.set(code, json.dumps(cached_data), ex=ttl)
-        except Exception as e:
-            print(f"Redis недоступен: {e}")
+        except redis.exceptions.ConnectionError as e:
+            self.logger.warning(f"Redis недоступен: {e}")
 
 
-    async def generate(self, data: LinkSchema, project_id: int, user: dict) -> Optional[Dict[str, Any]]:
-        user_id = user['id']
+    async def generate(self, data: LinkSchema, project_id: int, user: UserSchema) -> Optional[Dict[str, Any]]:
+        user_id = user.id
         try:
             project = await self.p_repository.get_by_id(project_id)
             if not project:
                 raise ValueError("Invalid project id")
 
             project_data = ProjectRel.model_validate(project).model_dump()
-
             code = secrets.token_urlsafe(16)
-
             end_at, format_end_at = self._calculate_expiration(data.ex)
-
             cached_data = self._build_cache_data(project_data, format_end_at)
 
             await self._save_to_redis(code, cached_data, data.ex)
@@ -76,18 +78,18 @@ class LinkService:
                 "end_at": end_at,
                 "link": code
             }
+
             await self.repository.create(data_for_save)
 
             action = LinkGenerateActionData(link=link)
 
             await self.mongo.add_to_db(action, project_id, user)
-
             return {
                 "link": link,
                 "ended_at": format_end_at
             }
         except Exception as e:
-            print(f"Ошибка при генерации ссылки: {e}")
+            self.logger.warning(f"Ошибка при генерации ссылки: {e}")
             return None
 
 
@@ -109,7 +111,7 @@ class LinkService:
             links = await self.repository.get_by_project_id(project_id, nowdate)
             return links
         except Exception as e:
-            print(f"Ошибка {e}")
+            self.logger.warning(f"Ошибка {e}")
             return False
 
     async def delete_all_links(self, project_id, user):
@@ -121,11 +123,11 @@ class LinkService:
                 return True
             return False
         except Exception as e:
-            print(f"Ошибка {e}")
+            self.logger.warning(f"Ошибка {e}")
             return False
 
 
-    async def delete_link_by_code(self, link_code: str, user: dict):
+    async def delete_link_by_code(self, link_code: str, user: UserSchema):
         try:
             project_id = await self.repository.delete_by_code(link_code)
             if project_id:
@@ -133,7 +135,7 @@ class LinkService:
                 await self.mongo.add_to_db(action, project_id, user)
                 return True
             return False
-        except Exception as e:
-            print(f"Ошибка {e}")
-            return False
+        except SQLAlchemyError as e:
+            self.logger.warning(f"Ошибка {e}")
+            raise e
 

@@ -1,12 +1,17 @@
-from fastapi import APIRouter, HTTPException
-from starlette.requests import Request
-from starlette.responses import RedirectResponse, Response, JSONResponse
+import json
+from typing import Dict
 
-from src.project.management_service.routers.link import accept_invite
+from fastapi import APIRouter, HTTPException
+from faststream import Depends
+from faststream.rabbit.fastapi import RabbitRouter
+from starlette.requests import Request
+from starlette.responses import RedirectResponse,  JSONResponse
+
 from src.shared.dependencies.service_deps import auth_service
 from src.shared.dependencies.user_deps import current_user
 
-router = APIRouter(prefix="/auth", tags=['Auth'])
+
+router = RabbitRouter(prefix="/auth", tags=['Auth'])
 
 
 @router.get("/")
@@ -52,7 +57,7 @@ async def callback(request: Request, service: auth_service):
             "access_token",
             tokens["access_token"],
             max_age=1800,
-            secure=False,  # Для локальной разработки
+            secure=False,
             httponly=True,
             samesite="lax"
         )
@@ -65,7 +70,7 @@ async def callback(request: Request, service: auth_service):
             samesite="lax"
         )
         response.headers["Location"] = "http://localhost:3000/auth/success"
-        response.status_code = 302  # Found
+        response.status_code = 302
         return response
     except Exception as e:
         return JSONResponse(
@@ -74,29 +79,11 @@ async def callback(request: Request, service: auth_service):
         )
 
 
-@router.get("/success")
-async def success_login(
-        request: Request):
-    context = {
-        "username": request.session.get('username'),
-        "avatar_url": request.session.get("avatar_url"),
-        "email": request.session.get("email"),
-        "title": "Вы успешно вошли"
-    }
-    try:
-        request.session.pop('username')
-        request.session.pop('avatar_url')
-        request.session.pop('email')
-    except KeyError:
-        print("Keys not found.")
-    return JSONResponse(context)
-
-
-@router.get('/refresh')
-async def refresh(request: Request, refresh_token: str, service: auth_service):
-    access_token = await service.refresh(refresh_token)
-    response = JSONResponse({'ok': True, 'token': access_token}, status_code=200)
-    return response
+@router.subscriber('refresh_tokens')
+async def refresh(data: dict, service: auth_service):
+    refresh_token = data['refresh_token']
+    response = await service.refresh(refresh_token)
+    await router.broker.publish(response, queue='access_tokens')
 
 
 @router.get("/logout")

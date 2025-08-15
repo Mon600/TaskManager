@@ -2,30 +2,32 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi_csrf_protect import CsrfProtect
+from sqlalchemy.exc import SQLAlchemyError
 from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse
 
-from src.shared.decorators.decorators import PermissionsChecker
-from src.shared.dependencies.service_deps import project_service, auth_service, link_service
-from src.shared.dependencies.user_deps import current_user
-from src.shared.models.Link_schemas import LinkSchema, GetLinksSchema
+from src.shared.dependencies.service_deps import project_service, auth_service, link_service, get_project_service
+from src.shared.dependencies.user_deps import current_user, user_role
+from src.shared.schemas.Link_schemas import LinkSchema, GetLinksSchema
 
 
 router = APIRouter(prefix='/links', tags=['Links'])
 
-@router.post('/{project_id}/generate')
-@PermissionsChecker('generate_url')
+
+@router.post('/{project_id}/generate', status_code=201)
 async def generate_url(user: current_user,
-                      project: project_service,
+                      role: user_role,
                       service: link_service,
                       data: LinkSchema,
                       project_id: int,
                       csrf_protect: CsrfProtect = Depends()
-                      ) -> JSONResponse:
+                      ):
 
     # await csrf_protect.validate_csrf(request)
+    if not role.generate_url:
+        raise HTTPException(status_code=403, detail="No access")
     link = await service.generate(data, project_id, user)
-    return JSONResponse(link, status_code=201)
+    return {"ok": True, "detail": link}
 
 
 @router.get('/invite/{code}')
@@ -39,14 +41,13 @@ async def invite_page(request: Request,
     if project['status'] != 'open':
         pass
     context = {
-        'request': request,
         'user': user,
         'project': project,
         'expiry_date': expiry_date,
         'code': code,
         'title': "Приглашение присоединиться к проекту"
     }
-    return JSONResponse(context)
+    return context
 
 @router.post('/invite/{code}/accept')
 async def accept_invite(user: current_user,
@@ -76,23 +77,29 @@ async def project_links(user: current_user,
     raise HTTPException(status_code=500, detail='Ошибка')
 
 
-@router.delete("/{project_id}/clear")
+@router.delete("/{project_id}/clear", status_code=200)
 async def delete_all_links(user: current_user,
+                           role: user_role,
                            service: link_service,
                            project_id: int
                            ):
+    if not role.manage_links:
+        raise HTTPException(status_code=403, detail='No access')
     result = await service.delete_all_links(project_id, user)
     if result:
-        return JSONResponse({'ok': True}, status_code=200)
+        return{'ok': True}
     else:
-        return JSONResponse({'ok': False}, status_code=500)
+        return {'ok': False}
 
 @router.delete('/{link_code}/delete')
 async def delete_link_by_code(user: current_user,
+                              role: user_role,
                               service: link_service,
                               link_code: str):
-    result = await service.delete_link_by_code(link_code, user)
-    if result:
-        return JSONResponse({'ok': True}, status_code=200)
-    else:
-        return JSONResponse({'ok': False}, status_code=500)
+    if not role.manage_links:
+        raise HTTPException(status_code=403, detail='No access')
+    try:
+        await service.delete_link_by_code(link_code, user)
+        return {'ok': True}
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=500, detail=str(e))

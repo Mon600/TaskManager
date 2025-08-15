@@ -1,14 +1,18 @@
 import datetime
 import json
+import logging
 
+import redis
 from authlib.integrations.starlette_client import OAuth
+from jose import JWTError
 from redis.asyncio import Redis
+from sqlalchemy.exc import SQLAlchemyError
 
 from src.shared.db.repositories.token_repository import TokenRepository
 from src.shared.jwt.jwt import create_token, decode_token
 from src.shared.db.repositories.user_repository import UserRepository
-from src.shared.models.Token_schemas import TokenModel
-from src.shared.models.User_schema import UserSchema
+from src.shared.schemas.Token_schemas import TokenModel
+from src.shared.schemas.User_schema import UserSchema
 from src.shared.config import get_secrets
 
 
@@ -19,6 +23,7 @@ class AuthService:
         self.repository = repository
         self.tokens_repository = tokens_repository
         self.redis = redis
+        self.logger = logging.getLogger(__name__)
         self.oauth.register(
             name='github',
             client_id=self.secrets['CLIENT_ID'],
@@ -34,7 +39,6 @@ class AuthService:
         data = {"user_id": user_id}
         access_token = await create_token(data)
         refresh_token = await create_token(data, token_type="refresh")
-        print(refresh_token)
         data = await decode_token(refresh_token['token'])
         exp = datetime.datetime.fromtimestamp(data['exp'])
         data_for_save = {'id': refresh_token['token_id'], 'token': refresh_token['token'], 'exp': exp }
@@ -42,8 +46,8 @@ class AuthService:
         if access_token and refresh_token:
             try:
                 await self.redis.set(refresh_token['token_id'], refresh_token['token'], ex= 43200 * 60)
-            except Exception as e:
-                print(f"Redis недоступен: {e}")
+            except redis.exceptions.ConnectionError as e:
+                self.logger.warning(f"Redis недоступен: {e}")
             return {"access_token": access_token['token'], "refresh_token": refresh_token["token_id"]}
         return  None
 
@@ -64,15 +68,13 @@ class AuthService:
         if res:
             return res
         else:
-            print("404")
             return None
 
 
     async def get_user_data(self, user_id: int) -> UserSchema | None:
-        res = await self.repository.get_by_id(int(user_id))
-        if res:
-            result = UserSchema.model_validate(res).model_dump()
-            return result
+        user_data = await self.repository.get_by_id(int(user_id))
+        if user_data:
+            return user_data
         else:
             return None
 
@@ -84,8 +86,8 @@ class AuthService:
             data = await self.redis.get(refresh_token)
             if data is not None:
                 data = json.loads(data)
-        except Exception as e:
-            print(f"Ошибка Redis: {e}")
+        except redis.exceptions.ConnectionError as e:
+            self.logger.warning(f"Ошибка Redis: {e}")
 
         if data is None:
             try:
@@ -98,8 +100,8 @@ class AuthService:
                     return None
 
                 data = data_schema.token
-            except Exception as e:
-                print(f"Ошибка при работе с БД: {e}")
+            except SQLAlchemyError as e:
+                self.logger.warning(f"Ошибка при работе с БД: {e}")
                 return None
 
         try:
@@ -109,10 +111,10 @@ class AuthService:
 
             user_id = token_data["user_id"]
             access_token = await create_token({"user_id": user_id})
-            return access_token
+            return {'access_token': access_token, 'refresh_token': refresh_token}
 
-        except Exception as e:
-            print(f"Ошибка при декодировании токена: {e}")
+        except JWTError as e:
+            self.logger.warning(f"Ошибка при декодировании токена: {e}")
             return None
 
 
@@ -124,8 +126,9 @@ class AuthService:
                 user_id = payload['user_id']
                 await self.redis.delete(f"current_user{user_id}")
             await self.redis.delete(refresh_token_id)
-        except Exception as e:
-            print(f'Redis недоступен: {e}')
+        except redis.exceptions.ConnectionError as e:
+            self.logger.warning(f'Redis недоступен: {e}')
+
 
 
 

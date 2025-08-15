@@ -6,11 +6,11 @@ from starlette.responses import RedirectResponse
 from starlette.staticfiles import StaticFiles
 
 from src.project.auth_service.routers.auth import router as auth
-from src.shared.config import origins
+from src.shared.config import origins, get_middleware_secret
 
 app = FastAPI()
 
-app.add_middleware(SessionMiddleware, secret_key="HjYkkiSgwjdV3RjwD3tEBPZ0p6KWQUafeEEuXmUKffSsu5z8vuxY9klcMgded8L9")
+app.add_middleware(SessionMiddleware, secret_key=get_middleware_secret())
 
 app.add_middleware(
     CORSMiddleware,

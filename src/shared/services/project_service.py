@@ -2,29 +2,31 @@ import datetime
 import logging
 from typing import Dict, Any
 
+
+import pymongo.errors
 from redis.asyncio import Redis
+from sqlalchemy.exc import SQLAlchemyError
 
 from src.shared.db.repositories.project_member_repository import ProjectMemberRepository
 from src.shared.db.repositories.project_repository import ProjectRepository
 from src.shared.db.repositories.role_repository import RoleRepository
-from src.shared.models.Project_schemas import ProjectData, ProjectDataGet, ProjectFromMember, ProjectWithRoles, \
+from src.shared.schemas.Project_schemas import ProjectData, ProjectDataGet, ProjectFromMember, ProjectWithRoles, \
     ProjectMember, ProjectMemberExtend
-from src.shared.models.Role_schemas import RoleSchemaWithId
+from src.shared.schemas.Role_schemas import RoleSchemaWithId
 from src.shared.mongo.db.models import ChangeProjectActionData, UserJoinActionData, ChangeDefaultRoleData, \
     DeleteUserActionData
 from src.shared.mongo.repositories.mongo_repositroy import MongoRepository
+from src.shared.schemas.User_schema import UserSchema
 
 
 class ProjectService:
     def __init__(self,
                  project_repository: ProjectRepository,
                  role_repository: RoleRepository,
-                 members_repository: ProjectMemberRepository,
                  mongo: MongoRepository,
                  redis: Redis):
         self.project_repository = project_repository
         self.role_repository = role_repository
-        self.members_repository = members_repository
         self.mongo = mongo
         self.redis = redis
         self.month_map = {
@@ -57,9 +59,13 @@ class ProjectService:
             return False
 
     async def create_project(self, data: ProjectData, user_id: int):
-        data_dict = data.model_dump()
-        project_id = await self.project_repository.new_project(data_dict, user_id)
-        return project_id
+        try:
+            data_dict = data.model_dump()
+            project_id = await self.project_repository.new_project(data_dict, user_id)
+            return project_id
+        except SQLAlchemyError as e:
+            self.logger.warning(f'Ошибка: {e}')
+            raise e
 
     async def get_project_by_id(self, project_id: int) -> ProjectData | None:
         data = await self.project_repository.get_by_id(project_id)
@@ -68,29 +74,26 @@ class ProjectService:
             return data_dict
         return data
 
-    async def get_project_info(self, project_id: int, user_id: int):
+    async def get_project_info(self, project_id: int):
         data = await self.project_repository.get_project_info(project_id)
-        member = await self.members_repository.get_member_by_user_id(project_id, user_id)
 
-        member_dict = ProjectMember.model_validate(member).model_dump()
         data['project'] = ProjectDataGet.model_validate(data['project'], strict=False).model_dump()
-
         project = data['project']
 
         members_count = data['members_count']
         tasks_count = data['tasks_count']
         completed_tasks_count = data['completed_tasks_count']
 
-        return {'project_info': {
+        return {
             'project': project,
             'members_count': members_count,
             'tasks_count': tasks_count,
             'completed_tasks_count': completed_tasks_count
-        },
-            'member': member_dict}
+        }
+
 
     async def get_projects_by_user_id(self, user_id: int) -> list | None:
-        projects = await self.members_repository.get_projects_by_user_id(user_id)
+        projects = await self.project_repository.get_projects_by_user_id(user_id)
         if not projects:
             return []
         res = [
@@ -107,24 +110,25 @@ class ProjectService:
 
     async def is_user_project_member(self, project_id: int, user_id: int):
         is_member = await self.members_repository.get_member_by_user_id(project_id, user_id)
-        schema = ProjectMember.model_validate(is_member).model_dump()
+        schema = ProjectMember.model_validate(is_member)
         return schema
 
     async def edit_project(self, project_id: int, new_data: ProjectData, user: dict):
         try:
             data_dict = new_data.model_dump()
             res = await self.project_repository.update_project(project_id, data_dict)
-            keys = ['name', 'description', 'status']
-            old_data_dict = dict(zip(keys, res[1::]))
 
             action=ChangeProjectActionData(
-                 old_data=old_data_dict,
+                 old_data=res,
                  new_data=data_dict)
             await self.mongo.add_to_db(action, project_id, user)
-            return {"new_data": new_data, "old_data": old_data_dict}
+            return {"new_data": new_data, "old_data": res}
+        except ValueError as e:
+            self.logger.warning(e)
+            raise e
         except Exception as e:
             self.logger.warning(e)
-            return False
+            raise e
 
     async def add_member(self, link_data: Dict[str, Any], user: Dict[str, Any]) -> bool:
 
@@ -171,7 +175,7 @@ class ProjectService:
             print(f"Ошибка: {e}")
             return None
 
-    async def change_default_role(self, project_id: int, role_id: int, user: dict):
+    async def change_default_role(self, project_id: int, role_id: int, user: UserSchema) -> ChangeDefaultRoleData:
         try:
             res = await self.project_repository.change_default_role(project_id, role_id)
             roles_dict = [RoleSchemaWithId.model_validate(role).model_dump() for role in res]
@@ -184,15 +188,15 @@ class ProjectService:
              )
 
             await self.mongo.add_to_db(action, project_id, user)
-            return {'old_role': old_role, 'new_role': new_role}
+            return action
+        except ValueError as e:
+            raise e
         except Exception as e:
-            print(f"Ошибка {e}")
-            return None
+            raise e
 
     async def delete_member(self, project_id: int, member_id: int, user: dict, reason: str = ''):
         try:
-            res = await self.members_repository.delete_member(project_id, member_id)
-            deleted_member = ProjectMemberExtend.model_validate(res).model_dump()
+            deleted_member = await self.members_repository.delete_member(project_id, member_id)
 
             action=DeleteUserActionData(
                  reason=reason,
@@ -200,6 +204,6 @@ class ProjectService:
             )
             await self.mongo.add_to_db(action, project_id, user)
             return deleted_member
-        except Exception as e:
-            print(f"Ошибка {e}")
-            return None
+        except (SQLAlchemyError, pymongo.errors.OperationFailure) as e:
+            self.logger.warning(f"Ошибка {e}")
+            raise e

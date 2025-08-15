@@ -29,9 +29,6 @@ async def create_token(data: dict, token_type: str = "access"):
     return returning_data
 
 
-
-
-
 async def decode_token(token: str):
     auth_data = await get_auth_data()
     try:

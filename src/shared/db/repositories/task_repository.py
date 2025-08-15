@@ -1,3 +1,4 @@
+import datetime
 from typing import Dict, Any
 
 from sqlalchemy import select, update, delete, asc, desc
@@ -6,7 +7,8 @@ from sqlalchemy.orm import selectinload
 
 from src.shared.db.models import Task, TaskAssignee, ProjectMember
 from src.shared.db.repositories.base_repository import BaseRepository
-from src.shared.models.FilterSchemas import TaskFilter, SortField, SortDirection
+from src.shared.schemas.FilterSchemas import TaskFilter, SortField, SortDirection
+from src.shared.schemas.Task_schemas import EditableTaskData
 
 
 class TaskRepository(BaseRepository):
@@ -15,7 +17,6 @@ class TaskRepository(BaseRepository):
 
 
     async def create_task(self, task_data: dict, assignees: list):
-        try:
             new_task = Task(**task_data)
             self.session.add(new_task)
             await self.session.flush()
@@ -29,9 +30,7 @@ class TaskRepository(BaseRepository):
             self.session.add_all(new_assignees)
             await self.session.commit()
             return new_task.id
-        except Exception as e:
-            print(f'Ошибка добавления записи в базу данных {e}')
-            return False
+
 
     async def get_tasks(self , project_id: int, limit: int = 20, offset: int = 0):
         stmt = (select(Task)
@@ -163,6 +162,10 @@ class TaskRepository(BaseRepository):
             Task.status
         ).where(Task.id == task_id)
         old_task_res = await self.session.execute(old_task_stmt)
+        old_task = old_task_res.first()
+        old_data_dict = EditableTaskData.model_validate(old_task).model_dump()
+        if data == old_data_dict:
+            raise ValueError("Old data and new data are the same.")
         stmt = (update(Task)
                 .where(Task.id == task_id)
                 .values(**data)
@@ -182,5 +185,18 @@ class TaskRepository(BaseRepository):
         await self.session.commit()
         return {
             'new_task_data': list(res.first()),
-            'old_task_data': list(old_task_res.first())
+            'old_task_data': list(old_task)
         }
+
+    async def complete_task(self, task_id: int, current_date: datetime.date):
+        stmt = (update(Task)
+                .where(Task.id == task_id, Task.status != 'completed')
+                .values(
+                    status='completed',
+                    completed_at=current_date
+                        )
+                .returning(Task)
+                )
+        res = await self.session.execute(stmt)
+        await self.session.commit()
+        return res.scalars().one_or_none()

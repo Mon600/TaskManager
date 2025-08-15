@@ -37,27 +37,6 @@ class ProjectMemberRepository(BaseRepository):
     #         await self.session.rollback()
     #         return None
 
-    async def get_projects_by_user_id(self, user_id):
-        stmt = select(ProjectMember).where(ProjectMember.user_id == user_id).options(
-            selectinload(ProjectMember.project_rel),
-            selectinload(ProjectMember.user_rel))
-
-        member_count_subq = (
-            select(
-                ProjectMember.project_id,
-                func.count(ProjectMember.user_id).label("member_count")
-            )
-            .group_by(ProjectMember.project_id)
-            .subquery()
-        )
-
-        stmt = stmt.join(
-            member_count_subq,
-            ProjectMember.project_id == member_count_subq.c.project_id
-        ).add_columns(member_count_subq.c.member_count)
-        res = await self.session.execute(stmt)
-        return res.all()
-
 
     async def get_member_by_user_id(self, project_id: int, user_id: int):
         stmt = select(ProjectMember).where(

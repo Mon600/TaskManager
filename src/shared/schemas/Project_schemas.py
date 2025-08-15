@@ -3,9 +3,9 @@ import datetime
 from babel.dates import format_date
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
-from src.shared.models.Role_schemas import RoleSchema, RoleSchemaWithId
-from src.shared.models.Task_schemas import TaskGetSchema
-from src.shared.models.User_schema import UserSchema
+from src.shared.schemas.Role_schemas import RoleSchema, RoleSchemaWithId
+from src.shared.schemas.Task_schemas import TaskGetSchema
+from src.shared.schemas.User_schema import UserSchema
 
 class ProjectData(BaseModel):
     name: str = Field(max_length=50, min_length=1, description="Название проекта")

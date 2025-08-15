@@ -1,8 +1,6 @@
 import asyncio
 
 
-
-
 class SocketIOHandlers:
     def __init__(self, sio):
         self.sio = sio

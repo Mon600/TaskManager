@@ -43,7 +43,7 @@ def send_yandex_mail(to: str, subject: str, body: str) -> bool:
         return True
 
     except Exception as e:
-        print(f"Ошибка отправки: {e}")
+        logger.warning(f"Ошибка отправки: {e}")
         return False
 
 
@@ -65,5 +65,5 @@ async def clear_links(self):
             await session.execute(stmt)
             await session.commit()
         except Exception as exc:
-            print(f"Error: {exc}")
+            logger.warning(f"Error: {exc}")
             raise self.retry(exc=exc, countdown=60)
