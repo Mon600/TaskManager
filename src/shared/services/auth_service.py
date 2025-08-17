@@ -111,7 +111,7 @@ class AuthService:
 
             user_id = token_data["user_id"]
             access_token = await create_token({"user_id": user_id})
-            return {'access_token': access_token, 'refresh_token': refresh_token}
+            return access_token
 
         except JWTError as e:
             self.logger.warning(f"Ошибка при декодировании токена: {e}")

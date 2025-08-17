@@ -7,7 +7,8 @@ from starlette.responses import JSONResponse
 
 
 from src.shared.dependencies.service_deps import role_service, get_project_service
-from src.shared.dependencies.user_deps import current_user, user_role
+from src.shared.dependencies.user_deps import current_user, project_context
+from src.shared.mongo.db.models import EditRoleActionData, CreateRoleActionData
 from src.shared.schemas.Role_schemas import RoleSchema, RoleSchemaWithId
 
 router = APIRouter(prefix='/roles', tags=['Roles'])
@@ -30,28 +31,30 @@ async def add_role(user: current_user,
                    project_id: int,
                    service: role_service,
                    data: RoleSchema,
-                   csrf_protect: CsrfProtect = Depends()):
+                   csrf_protect: CsrfProtect = Depends()) -> CreateRoleActionData:
     try:
         # await csrf_protect.validate_csrf(request)
-        await service.new_role(project_id, data)
-        return {"ok": True}
+        action = await service.new_role(project_id, user, data)
+        return action
     except SQLAlchemyError as e:
         raise HTTPException(status_code=500, detail=e)
 
 
 @router.put("/project/{project_id}/role/{role_id}/update")
 async def update_role(request: Request,
-                      user: current_user,
+                      project_member: project_context,
                       project_id: int,
-                      role: user_role,
                       data: RoleSchema,
                       role_id: int,
                       service: role_service,
-                      csrf_protect: CsrfProtect = Depends()):
+                      csrf_protect: CsrfProtect = Depends()) -> EditRoleActionData:
     try:
         # await csrf_protect.validate_csrf(request)
-        res = await service.role_update(role_id, data, user, project_id)
-        return res
+        if project_member.member.role_rel.change_roles:
+            action = await service.role_update(role_id, data, project_member.user, project_id)
+            return action
+        else:
+            raise HTTPException(status_code=403, detail="No access")
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
@@ -62,16 +65,15 @@ async def update_role(request: Request,
 
 @router.delete("/project/{project_id}/role/{role_id}/delete")
 async def delete_role(request: Request,
-                      user: current_user,
                       project_id: int,
-                      role: user_role,
+                      project_member: project_context,
                       role_id: int,
                       service: role_service,
                       csrf_protect: CsrfProtect = Depends()):
-    await csrf_protect.validate_csrf(request)
-    if role.change_roles:
+    # await csrf_protect.validate_csrf(request)
+    if project_member.member.role_rel.change_roles:
         try:
-            await service.role_delete(role_id)
+            await service.role_delete(role_id, project_id, project_member.user)
         except (SQLAlchemyError, PostgresError) as e:
             raise HTTPException(status_code=500, detail=e)
     else:
@@ -81,8 +83,7 @@ async def delete_role(request: Request,
 @router.put("/{project_id}/member/{member_id}/update-role/{role_id}")
 
 async def change_role(request: Request,
-                      user: current_user,
-                      role: user_role,
+                      project_member: project_context,
                       project_id: int,
                       member_id: int,
                       role_id: int,
@@ -90,9 +91,9 @@ async def change_role(request: Request,
                       csrf_protect: CsrfProtect = Depends()
                       ):
     # await csrf_protect.validate_csrf(request)
-    if role.change_roles:
+    if project_member.member.role_rel.change_roles:
         try:
-            res = await service.new_member_role(member_id, project_id, role_id, user)
+            res = await service.new_member_role(member_id, project_id, role_id, project_member.user)
             return res
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))

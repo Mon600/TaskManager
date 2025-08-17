@@ -1,9 +1,12 @@
 from typing import Annotated, AsyncGenerator
 
+import pymongo.errors
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+
 from src.shared.config import async_session
+from src.shared.mongo.db.database import Database, database
 
 
 async def get_session() -> AsyncGenerator:
@@ -19,7 +22,11 @@ async def get_session() -> AsyncGenerator:
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
+async def get_mongo() -> AsyncGenerator:
+    yield database.db
 
+
+MongoDep = Annotated[Database, Depends(get_mongo)]
 
 
 

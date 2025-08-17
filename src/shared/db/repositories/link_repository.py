@@ -38,8 +38,11 @@ class LinkRepository(BaseRepository):
         await self.session.commit()
         return True
 
-    async def delete_by_code(self, link_code: str):
-        stmt = delete(ProjectLink).where(ProjectLink.link == link_code).returning(ProjectLink.project_id)
+    async def delete_by_code(self, link_code: str, project_id: int):
+        stmt = (delete(ProjectLink)
+                .where(
+            ProjectLink.link == link_code,
+            ProjectLink.project_id == project_id).returning(ProjectLink.project_id))
         result = await self.session.execute(stmt)
         await self.session.commit()
         return result.scalars().one()

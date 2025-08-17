@@ -1,4 +1,4 @@
-from typing import Dict, Any
+from typing import Dict, Any, Union
 
 from asyncpg import PostgresError
 from fastapi import APIRouter, Depends
@@ -9,11 +9,12 @@ from starlette.exceptions import HTTPException
 from starlette.requests import Request
 
 from src.shared.dependencies.service_deps import task_service
-from src.shared.dependencies.user_deps import current_user, user_role
+from src.shared.dependencies.user_deps import current_user, user_role, project_context
 from src.shared.schemas.FilterSchemas import TaskFilter
-from src.shared.schemas.Task_schemas import TaskSchema, TaskGetSchema, UpdateTaskSchema, BaseTaskSchema
+from src.shared.schemas.Task_schemas import TaskSchema, TaskGetSchema, UpdateTaskSchema, BaseTaskSchema, \
+    CreateTaskSchema
 from src.shared.schemas.pagination import PaginationDep
-from src.shared.mongo.db.models import ChangeTaskActionData
+from src.shared.mongo.db.models import ChangeTaskActionData, CreateTaskActionData, DeleteTaskActionData
 from src.shared.ws.socket import sio
 
 router = APIRouter(prefix='/tasks', tags=['Tasks'])
@@ -21,17 +22,17 @@ router = APIRouter(prefix='/tasks', tags=['Tasks'])
 
 @router.post('/project/{project_id}/create')
 async def create_task(project_id: int,
-                      role: user_role,
-                      data: TaskSchema,
+                      project_member: project_context,
+                      data: CreateTaskSchema,
                       service: task_service,
                       csrf_protect: CsrfProtect = Depends(),
-                      )-> TaskGetSchema:
+                      )-> CreateTaskActionData:
     # await csrf_protect.validate_csrf(request)
-    if role.create_tasks:
+    if project_member.member.role_rel.create_tasks:
         try:
-            res = await service.create_task(data)
-            await sio.emit('update_tasks_list', data=res, to=f'project_{project_id}')
-            return res
+            action = await service.create_task(data, project_id, project_member.user)
+            await sio.emit('update_tasks_list', data=action.created_task, to=f'project_{project_id}')
+            return action
         except (SQLAlchemyError, PostgresError) as e:
             raise HTTPException(status_code=500, detail=str(e))
     else:
@@ -40,38 +41,37 @@ async def create_task(project_id: int,
 
 @router.put('/project/{project_id}/update/{task_id}')
 async def update_task(
-                      user: current_user,
-                      role: user_role,
+                      project_member: project_context,
                       project_id: int,
                       task_id: int,
                       service: task_service,
                       data: UpdateTaskSchema,
                       csrf_protect: CsrfProtect = Depends()
-                      ) -> ChangeTaskActionData | Dict[str, Any]:
+                      ) -> TaskGetSchema:
     # await csrf_protect.validate_csrf(request)
-    if role.update_tasks:
-        res = await service.update_task(data, task_id, project_id, user)
+    if project_member.member.role_rel.update_tasks:
+        res = await service.update_task(data, task_id, project_id, project_member.user)
         if res:
-            if isinstance(res, ChangeTaskActionData):
-                await sio.emit('update_tasks_list', data=res.new_data, to=f'project_{project_id}')
+            if isinstance(res, BaseTaskSchema):
+                await sio.emit('update_tasks_list', data=res, to=f'project_{project_id}')
             return res
         return res
     else:
         raise HTTPException(status_code=403, detail="No access")
 
-@router.delete('/project/{project_id}/delete/{task_id}', status_code=204)
+@router.delete('/project/{project_id}/delete/{task_id}')
 async def delete_task(request: Request,
-                      role: user_role,
+                      project_member: project_context,
                       project_id: int,
                       task_id: int,
                       service: task_service,
-                      csrf_protect: CsrfProtect = Depends()):
-    await csrf_protect.validate_csrf(request)
-    if role.delete_tasks:
+                      csrf_protect: CsrfProtect = Depends()) -> DeleteTaskActionData:
+    # await csrf_protect.validate_csrf(request)
+    if project_member.member.role_rel.delete_tasks:
         try:
-            await service.delete_task(task_id)
+            action = await service.delete_task(task_id, project_id, project_member.user)
             await sio.emit('delete_task', data={'task_id': task_id}, to=f'project_{project_id}')
-            return {'ok': True}
+            return action
         except (SQLAlchemyError, PostgresError) as e:
             raise HTTPException(status_code=500, detail=str(e))
     else:
@@ -103,9 +103,9 @@ async def get_tasks_with_filter(user: current_user,
         raise HTTPException(status_code=404, detail="Not found")
 
 
-@router.put('/{task_id}/complete')
+@router.put('/{project_id}/{task_id}/complete')
 async def complete_task(request: Request,
-                        user: current_user,
+                        project_member: project_context,
                         task_id: int,
                         service: task_service) -> BaseTaskSchema:
     try:
@@ -119,9 +119,11 @@ async def complete_task(request: Request,
 
 
 @router.get('/project/{project_id}/tasks')
-async def get_tasks(service: task_service, project_id: int, pagination: PaginationDep) -> list[TaskGetSchema]:
+async def get_tasks(service: task_service,
+                    project_id: int,
+                    pagination: PaginationDep) -> dict[str, Union[list[TaskGetSchema], int]]:
     try:
-        tasks = service.get_tasks(project_id, pagination.limit, pagination.offset)
+        tasks = await service.get_tasks(project_id, pagination.limit, pagination.offset)
         return tasks
     except (SQLAlchemyError, PostgresError) as e:
         raise HTTPException(status_code=500, detail=str(e))

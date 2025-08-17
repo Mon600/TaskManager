@@ -115,15 +115,12 @@ class TriggersManager:
                 END IF;
             END IF;
 
-            -- Проверяем, является ли роль ролью по умолчанию
             SELECT EXISTS (
                 SELECT 1 FROM projects 
                 WHERE default_role_id = NEW.id
             ) INTO is_default_role;
 
-            -- Защита роли по умолчанию (полная защита прав)
             IF is_default_role THEN
-                -- Запрещаем изменять ВСЕ права и приоритет
                 IF NEW.priority != OLD.priority OR
                    NEW.create_tasks != OLD.create_tasks OR
                    NEW.delete_tasks != OLD.delete_tasks OR

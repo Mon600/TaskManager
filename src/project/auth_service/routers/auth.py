@@ -5,13 +5,13 @@ from fastapi import APIRouter, HTTPException
 from faststream import Depends
 from faststream.rabbit.fastapi import RabbitRouter
 from starlette.requests import Request
-from starlette.responses import RedirectResponse,  JSONResponse
+from starlette.responses import RedirectResponse, JSONResponse, Response
 
 from src.shared.dependencies.service_deps import auth_service
 from src.shared.dependencies.user_deps import current_user
 
 
-router = RabbitRouter(prefix="/auth", tags=['Auth'])
+router = APIRouter(prefix="/auth", tags=['Auth'])
 
 
 @router.get("/")
@@ -56,7 +56,7 @@ async def callback(request: Request, service: auth_service):
         response.set_cookie(
             "access_token",
             tokens["access_token"],
-            max_age=1800,
+            # max_age=1800,
             secure=False,
             httponly=True,
             samesite="lax"
@@ -73,18 +73,26 @@ async def callback(request: Request, service: auth_service):
         response.status_code = 302
         return response
     except Exception as e:
-        return JSONResponse(
-            {"success": False, "error": str(e)},
+        raise HTTPException(
+            detail={"success": False, "error": str(e)},
             status_code=400
         )
 
-
-@router.subscriber('refresh_tokens')
-async def refresh(data: dict, service: auth_service):
-    refresh_token = data['refresh_token']
-    response = await service.refresh(refresh_token)
-    await router.broker.publish(response, queue='access_tokens')
-
+@router.get('/refresh')
+async def refresh(request: Request, service: auth_service, response: Response):
+    refresh_token = request.cookies.get('refresh_token')
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail='Not Authorized')
+    # response = Response()
+    token = await service.refresh(refresh_token)
+    response.set_cookie('access_token',
+                        token['token'],
+                        # max_age=1800,
+                        secure=False,
+                        httponly=True,
+                        samesite="lax"
+                        )
+    return {'access_token': token['token']}
 
 @router.get("/logout")
 async def logout(request: Request, service: auth_service):

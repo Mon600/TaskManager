@@ -1,12 +1,12 @@
 from typing import Dict, Any
 
-from sqlalchemy import select, desc, update
+from sqlalchemy import select, desc, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.shared.db.models import Role, ProjectMember
 from src.shared.db.repositories.base_repository import BaseRepository
-from src.shared.schemas.Project_schemas import ProjectMemberExtend
+from src.shared.schemas.Project_schemas import ProjectMemberSchemaExtend
 from src.shared.schemas.Role_schemas import RoleSchema
 
 
@@ -15,28 +15,35 @@ class RoleRepository(BaseRepository):
         super().__init__(Role, session)
 
 
-    async def add_role(self, project_id: int,role: dict):
-        role = Role(project_id=project_id, **role)
+    async def add_role(self, project_id: int, data: RoleSchema):
+        data_dict = data.model_dump()
+        role = Role(project_id=project_id, **data_dict)
         self.session.add(role)
         await self.session.commit()
-        return True
+        role_schema = RoleSchema.model_validate(role)
+        return role_schema
 
+
+    async def delete_role(self, role_id: int, project_id: int):
+        stmt = delete(Role).where(Role.id == role_id, Role.project_id == project_id).returning(Role)
+        result = await self.session.execute(stmt)
+        role_db = result.scalars().first()
+        role_schema = RoleSchema.model_validate(role_db)
+        return role_schema
 
     async def get_roles(self, project_id: int):
         stmt = select(Role).where(Role.project_id == project_id).order_by(desc(Role.priority))
         res = await self.session.execute(stmt)
         return res.scalars().all()
 
-    async def update_role_info(self, role_id: int, new_data: Dict[str, Any]):
+    async def update_role_info(self, role_id: int, new_data: RoleSchema):
         old_data_stmt = select(Role).where(Role.id == role_id)
         old_data_res = await self.session.execute(old_data_stmt)
         old_data = old_data_res.scalars().one_or_none()
         if not old_data is None:
-            old_data_dict = RoleSchema.model_validate(old_data).model_dump()
-            if old_data_dict == new_data:
-                raise ValueError("Old data and new data the same")
-
-        stmt = update(Role).where(Role.id == role_id).values(**new_data)
+            old_data_dict = RoleSchema.model_validate(old_data)
+        data_dict = new_data.model_dump()
+        stmt = update(Role).where(Role.id == role_id).values(**data_dict)
         await self.session.execute(stmt)
         await self.session.commit()
         return old_data
@@ -54,7 +61,7 @@ class RoleRepository(BaseRepository):
                         )
         res_old_data = await self.session.execute(old_data_stmt)
         old_data = res_old_data.scalars().one_or_none()
-        old_data_dict = ProjectMemberExtend.model_validate(old_data)
+        old_data_dict = ProjectMemberSchemaExtend.model_validate(old_data)
         if old_data_dict.role_id == role_id:
             raise ValueError("Old role and new role the same")
         stmt = (update(ProjectMember)

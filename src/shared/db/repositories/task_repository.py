@@ -1,14 +1,15 @@
 import datetime
 from typing import Dict, Any
 
-from sqlalchemy import select, update, delete, asc, desc
+from sqlalchemy import select, update, delete, asc, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.shared.db.models import Task, TaskAssignee, ProjectMember
 from src.shared.db.repositories.base_repository import BaseRepository
+from src.shared.schemas.Assigneed_schemas import AssigneesModel
 from src.shared.schemas.FilterSchemas import TaskFilter, SortField, SortDirection
-from src.shared.schemas.Task_schemas import EditableTaskData
+from src.shared.schemas.Task_schemas import EditableTaskData, TaskGetSchema, BaseTaskSchema, CreateTaskSchema
 
 
 class TaskRepository(BaseRepository):
@@ -16,10 +17,14 @@ class TaskRepository(BaseRepository):
         super().__init__(Task, session)
 
 
-    async def create_task(self, task_data: dict, assignees: list):
-            new_task = Task(**task_data)
+    async def create_task(self,
+                          task_data: dict,
+                          assignees: list[int],
+                          project_id: int) -> int:
+
+            new_task = Task(**task_data, project_id=project_id)
             self.session.add(new_task)
-            await self.session.flush()
+            await self.session.commit()
             new_assignees = [
                 TaskAssignee(**{
                     "task_id": new_task.id,
@@ -33,18 +38,39 @@ class TaskRepository(BaseRepository):
 
 
     async def get_tasks(self , project_id: int, limit: int = 20, offset: int = 0):
+
+
         stmt = (select(Task)
-                .where(Task.project_id == project_id, Task.status == 'processing')
+                .where(Task.project_id == project_id)#, Task.status == 'processing')
                 .options(
             selectinload(Task.assignees_rel)
             .load_only(TaskAssignee.project_member_id)
             .selectinload(TaskAssignee.project_member_rel)
             .selectinload(ProjectMember.user_rel)
-        ).offset(offset).limit(limit)
         )
-        result = await self.session.execute(stmt)
-        all_tasks = result.scalars().all()
-        return all_tasks
+                .offset(offset)
+                .limit(limit)
+        )
+
+        tasks_db = await self.session.execute(stmt)
+        all_tasks = tasks_db.scalars().all()
+
+        count_stmt = (
+            select(
+                func.count(Task.id).label("total_count"),
+                func.count(Task.id).filter(Task.status == 'completed').label("completed_count")
+            )
+            .where(Task.project_id == project_id)
+        )
+
+        count_db = await self.session.execute(count_stmt)
+        counters = count_db.first()
+        print(counters)
+        return {
+            'tasks': all_tasks,
+            'total_tasks_count': counters[0],
+            'completed_tasks_count': counters[1]
+        }
 
     async def get_filtered_tasks(self, project_id: int, filters: TaskFilter):
         sorted_fields = {
@@ -81,9 +107,7 @@ class TaskRepository(BaseRepository):
         return res.scalars().all()
 
 
-
-
-    async def get_task(self, task_id:int):
+    async def get_task(self, task_id:int) -> TaskGetSchema:
         stmt = (select(Task)
                 .where(Task.id == task_id)
                 .options(
@@ -94,16 +118,19 @@ class TaskRepository(BaseRepository):
                         )
                 )
         task = await self.session.execute(stmt)
-        return task.scalars().one_or_none()
+        task_db =  task.scalars().one_or_none()
+        task_schema = TaskGetSchema.model_validate(task_db)
+        return task_schema
 
-    async def update_assignees(self,task_id, assignees: list, project_id: int):
+
+    async def update_assignees(self,task_id, assignees: list, project_id: int) -> Dict[str, list[AssigneesModel]]:
         if assignees:
             member_check_stmt = select(ProjectMember.id).where(
                 ProjectMember.id.in_(assignees),
                 ProjectMember.project_id == project_id
             )
-            result = await self.session.execute(member_check_stmt)
-            existing_members = {row[0] for row in result.fetchall()}
+            result = await self.session.scalars(member_check_stmt)
+            existing_members = set(result.all())
 
             invalid_members = set(assignees) - existing_members
             if invalid_members:
@@ -114,8 +141,9 @@ class TaskRepository(BaseRepository):
                 .selectinload(ProjectMember.user_rel)
             )
         res = await self.session.execute(assignees_stmt)
-        old_assignees = res.scalars().all()
-        current_assignees_ids = set(assignee.project_member_id for assignee in old_assignees)
+        old_assignees_db = res.scalars().all()
+        old_assignees = [AssigneesModel.model_validate(assignee) for assignee in old_assignees_db]
+        current_assignees_ids = set(assignee.project_member_id for assignee in old_assignees_db)
         data_to_add = set(assignees) - current_assignees_ids
         data_to_delete =  list(current_assignees_ids - set(assignees))
 
@@ -143,52 +171,37 @@ class TaskRepository(BaseRepository):
             )
         )
         final_res = await self.session.execute(final_assignees_stmt)
-        task_assignees = final_res.scalars().all()
-        return {'new_assignees': task_assignees, 'old_assignees': old_assignees}
+        task_assignees_db = final_res.scalars().all()
+        task_assignees = [AssigneesModel.model_validate(assignee) for assignee in task_assignees_db]
+        return {
+            'new_assignees': task_assignees,
+            'old_assignees': old_assignees
+        }
 
 
-
-    async def update_task(self, task_id, data: Dict[str, Any]):
-        old_task_stmt = select(
-            Task.id,
-            Task.project_id,
-            Task.name,
-            Task.description,
-            Task.deadline,
-            Task.started_at,
-            Task.completed_at,
-            Task.priority,
-            Task.is_ended,
-            Task.status
+    async def update_task(self, task_id, data: Dict[str, Any]) -> Dict[str, BaseTaskSchema]:
+        old_task_stmt = select(Task
         ).where(Task.id == task_id)
         old_task_res = await self.session.execute(old_task_stmt)
-        old_task = old_task_res.first()
-        old_data_dict = EditableTaskData.model_validate(old_task).model_dump()
-        if data == old_data_dict:
-            raise ValueError("Old data and new data are the same.")
+        old_task = old_task_res.scalars().first()
+        old_data_schema = BaseTaskSchema.model_validate(old_task)
         stmt = (update(Task)
                 .where(Task.id == task_id)
                 .values(**data)
-                .returning(Task.id,
-                           Task.project_id,
-                           Task.name,
-                           Task.description,
-                           Task.deadline,
-                           Task.started_at,
-                           Task.completed_at,
-                           Task.priority,
-                           Task.is_ended,
-                           Task.status)
+                .returning(Task)
                 )
 
         res = await self.session.execute(stmt)
+        new_data = res.scalars().first()
+        new_data_schema = BaseTaskSchema.model_validate(new_data)
         await self.session.commit()
         return {
-            'new_task_data': list(res.first()),
-            'old_task_data': list(old_task)
+            'new_task_data': old_data_schema,
+            'old_task_data': new_data_schema
         }
 
-    async def complete_task(self, task_id: int, current_date: datetime.date):
+
+    async def complete_task(self, task_id: int, current_date: datetime.date) -> TaskGetSchema:
         stmt = (update(Task)
                 .where(Task.id == task_id, Task.status != 'completed')
                 .values(
@@ -199,4 +212,19 @@ class TaskRepository(BaseRepository):
                 )
         res = await self.session.execute(stmt)
         await self.session.commit()
-        return res.scalars().one_or_none()
+        task_db = res.scalars().one_or_none()
+        task_schema = TaskGetSchema.model_validate(task_db)
+        return task_schema
+
+    async def delete_task(self, task_id: int) -> TaskGetSchema:
+        stmt = (
+            delete(Task)
+            .where(Task.id == task_id)
+            .returning(Task)
+                )
+        result = await self.session.execute(stmt)
+        task_db = result.scalars().one()
+        task_schema = TaskGetSchema.model_validate(task_db)
+        return task_schema
+
+

@@ -5,6 +5,7 @@ import secrets
 from typing import Optional, Dict, Any
 
 import redis.exceptions
+from asyncpg import PostgresError
 from asyncpg.pgproto.pgproto import timedelta
 from babel.dates import format_datetime
 from redis.asyncio import Redis
@@ -12,23 +13,23 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from src.shared.db.repositories.link_repository import LinkRepository
 from src.shared.db.repositories.project_repository import ProjectRepository
+from src.shared.mongo.db.models import LinkGenerateActionData, LinkDeleteActionData
 from src.shared.schemas.Link_schemas import LinkSchema, GetLinkSchema
 from src.shared.schemas.Project_schemas import ProjectRel
-from src.shared.mongo.db.models import LinkDeleteActionData, LinkGenerateActionData
-from src.shared.mongo.repositories.mongo_repositroy import MongoRepository
 from src.shared.schemas.User_schema import UserSchema
+from src.shared.services.audit_service import AuditService
 
 
 class LinkService:
     def __init__(self,
                  repository: LinkRepository,
                  p_repository: ProjectRepository,
-                 mongo: MongoRepository,
-                 redis: Redis):
+                 redis: Redis,
+                 audit: AuditService):
         self.p_repository = p_repository
         self.repository = repository
-        self.mongo = mongo
         self.redis = redis
+        self.audit = audit
         self.logger = logging.getLogger(__name__)
 
 
@@ -80,17 +81,19 @@ class LinkService:
             }
 
             await self.repository.create(data_for_save)
-
-            action = LinkGenerateActionData(link=link)
-
-            await self.mongo.add_to_db(action, project_id, user)
-            return {
-                "link": link,
-                "ended_at": format_end_at
-            }
-        except Exception as e:
+            try:
+                data = LinkGenerateActionData(link=link)
+                await self.audit.log(project_id, user, data)
+                return {
+                    "link": link,
+                    "ended_at": format_end_at
+                }
+            except ValueError as e:
+                self.logger.warning(f'Ошибка: {str(e)}')
+                raise e
+        except (SQLAlchemyError, PostgresError) as e:
             self.logger.warning(f"Ошибка при генерации ссылки: {e}")
-            return None
+            raise e
 
 
     async def get_project_by_code(self, code: str):
@@ -110,32 +113,34 @@ class LinkService:
             nowdate = datetime.datetime.now()
             links = await self.repository.get_by_project_id(project_id, nowdate)
             return links
-        except Exception as e:
+        except (SQLAlchemyError, PostgresError) as e:
             self.logger.warning(f"Ошибка {e}")
-            return False
+            raise e
 
-    async def delete_all_links(self, project_id, user):
+    async def delete_all_links(self, project_id, user: UserSchema):
         try:
             res = await self.repository.delete_all_links(project_id)
             if res:
-                action = LinkDeleteActionData(is_all=True)
-                await self.mongo.add_to_db(action, project_id, user)
+                data = LinkDeleteActionData(is_all=True)
+                await self.audit.log(project_id, user, data)
                 return True
             return False
-        except Exception as e:
+        except (SQLAlchemyError, PostgresError) as e:
             self.logger.warning(f"Ошибка {e}")
-            return False
+            raise e
 
 
-    async def delete_link_by_code(self, link_code: str, user: UserSchema):
+    async def delete_link_by_code(self, link_code: str, project_id: int, user: UserSchema) -> LinkDeleteActionData:
         try:
-            project_id = await self.repository.delete_by_code(link_code)
-            if project_id:
-                action = LinkDeleteActionData(link=link_code)
-                await self.mongo.add_to_db(action, project_id, user)
-                return True
-            return False
-        except SQLAlchemyError as e:
+            await self.repository.delete_by_code(link_code)
+            try:
+                data = LinkDeleteActionData(link=link_code)
+                await self.audit.log(project_id, user, data)
+                return data
+            except ValueError as e:
+                self.logger.warning(f'Ошибка: {e}')
+                raise e
+        except (SQLAlchemyError, PostgresError) as e:
             self.logger.warning(f"Ошибка {e}")
             raise e
 

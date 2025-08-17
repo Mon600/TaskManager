@@ -7,7 +7,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse
 
 from src.shared.dependencies.service_deps import project_service, auth_service, link_service, get_project_service
-from src.shared.dependencies.user_deps import current_user, user_role
+from src.shared.dependencies.user_deps import current_user, project_context
+from src.shared.mongo.db.models import LinkDeleteActionData
 from src.shared.schemas.Link_schemas import LinkSchema, GetLinksSchema
 
 
@@ -15,18 +16,17 @@ router = APIRouter(prefix='/links', tags=['Links'])
 
 
 @router.post('/{project_id}/generate', status_code=201)
-async def generate_url(user: current_user,
-                      role: user_role,
-                      service: link_service,
-                      data: LinkSchema,
-                      project_id: int,
-                      csrf_protect: CsrfProtect = Depends()
-                      ):
+async def generate_url(project_member: project_context,
+                       service: link_service,
+                       data: LinkSchema,
+                       project_id: int,
+                       csrf_protect: CsrfProtect = Depends()
+                       ):
 
     # await csrf_protect.validate_csrf(request)
-    if not role.generate_url:
+    if not project_member.member.role_rel.generate_url:
         raise HTTPException(status_code=403, detail="No access")
-    link = await service.generate(data, project_id, user)
+    link = await service.generate(data, project_id, project_member.user)
     return {"ok": True, "detail": link}
 
 
@@ -78,28 +78,27 @@ async def project_links(user: current_user,
 
 
 @router.delete("/{project_id}/clear", status_code=200)
-async def delete_all_links(user: current_user,
-                           role: user_role,
+async def delete_all_links(project_member: project_context,
                            service: link_service,
                            project_id: int
                            ):
-    if not role.manage_links:
+    if not project_context.role_rel.manage_links:
         raise HTTPException(status_code=403, detail='No access')
-    result = await service.delete_all_links(project_id, user)
+    result = await service.delete_all_links(project_id, project_context.user)
     if result:
         return{'ok': True}
     else:
         return {'ok': False}
 
-@router.delete('/{link_code}/delete')
-async def delete_link_by_code(user: current_user,
-                              role: user_role,
+@router.delete('/{project_id}/{link_code}/delete')
+async def delete_link_by_code(project_member: project_context,
+                              project_id: int,
                               service: link_service,
-                              link_code: str):
-    if not role.manage_links:
+                              link_code: str) -> LinkDeleteActionData:
+    if not project_member.member.role_rel.manage_links:
         raise HTTPException(status_code=403, detail='No access')
     try:
-        await service.delete_link_by_code(link_code, user)
-        return {'ok': True}
+        action = await service.delete_link_by_code(link_code, project_id, project_member.user)
+        return action
     except SQLAlchemyError as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -7,6 +7,7 @@ from src.shared.schemas.User_schema import UserSchema
 
 class MongoRepository:
 
+
     @staticmethod
     async def add_to_db(action: BaseActionData,
                         project_id: int,
@@ -16,7 +17,6 @@ class MongoRepository:
                          action=action)
         await record.insert()
         return True
-
 
     @staticmethod
     async def get_all(project_id: int):

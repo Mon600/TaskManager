@@ -14,7 +14,7 @@ class ProjectData(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-class ProjectMember(BaseModel):
+class ProjectMemberSchema(BaseModel):
     id: int
     user_id: int
     project_id: int
@@ -23,7 +23,7 @@ class ProjectMember(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-class ProjectMemberExtend(ProjectMember):
+class ProjectMemberSchemaExtend(ProjectMemberSchema):
     user_rel: UserSchema
 
 
@@ -59,4 +59,8 @@ class ProjectWithRoles(ProjectRel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
+class ProjectContext(BaseModel):
+    member: ProjectMemberSchema
+    user: UserSchema
 

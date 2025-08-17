@@ -1,9 +1,10 @@
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.shared.db.models import ProjectMember, Role
 from src.shared.db.repositories.base_repository import BaseRepository
+from src.shared.schemas.Project_schemas import ProjectMemberSchemaExtend
 
 
 class ProjectMemberRepository(BaseRepository):
@@ -20,22 +21,6 @@ class ProjectMemberRepository(BaseRepository):
                 )
         res = await self.session.execute(stmt)
         return res.scalars().all()
-
-    #
-    # async def get_project_member(self, user_id: int, project_id: int):
-    #     try:
-    #         stmt = (select(ProjectMember).where(
-    #             ProjectMember.user_id == user_id,
-    #             ProjectMember.project_id == project_id)
-    #         .options(
-    #             selectinload(ProjectMember.role_rel)
-    #             )
-    #         )
-    #         data = await self.session.execute(stmt)
-    #         return data.scalars().one_or_none()
-    #     except Exception as e:
-    #         await self.session.rollback()
-    #         return None
 
 
     async def get_member_by_user_id(self, project_id: int, user_id: int):
@@ -60,10 +45,10 @@ class ProjectMemberRepository(BaseRepository):
         await self.session.commit()
 
 
-    async def delete_member(self, project_id: int, member_id: int):
+    async def delete_member(self, project_id: int, member_id: int) -> ProjectMemberSchemaExtend:
         old_member_stmt = (select(ProjectMember)
                            .where(
-                    ProjectMember.project_id == project_id,
+                     ProjectMember.project_id == project_id,
                                 ProjectMember.id == member_id
                                     )
                             .options(
@@ -72,8 +57,8 @@ class ProjectMemberRepository(BaseRepository):
                                     )
                             )
         res = await self.session.execute(old_member_stmt)
-        deleted_user = res.scalars().one()
-
+        deleted_user_db = res.scalars().one()
+        deleted_user_schema = ProjectMemberSchemaExtend.model_validate(deleted_user_db)
         stmt = (delete(ProjectMember)
                 .where(
         ProjectMember.project_id == project_id,
@@ -81,5 +66,5 @@ class ProjectMemberRepository(BaseRepository):
                         )
                 )
         await self.session.execute(stmt)
-        return deleted_user
+        return deleted_user_schema
 

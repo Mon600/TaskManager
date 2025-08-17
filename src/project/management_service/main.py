@@ -1,42 +1,40 @@
-import asyncio
+import logging
 from contextlib import asynccontextmanager
 
 import socketio
 import uvicorn
-from alembic.command import history
-from fastapi import FastAPI, Depends
-
+from fastapi import FastAPI
 from fastapi_csrf_protect import CsrfProtect
-from redis.asyncio import Redis
 from starlette.middleware.cors import CORSMiddleware
-
 from starlette.middleware.sessions import SessionMiddleware
-from starlette.responses import RedirectResponse, JSONResponse
+from starlette.responses import RedirectResponse
 
-from src.shared.dependencies.redis_deps import RedisDep, get_redis
-from src.shared.mongo.db.database import db
-from src.project.management_service.routers.project import router as project_router
+from src.project.management_service.routers.audit import router as audit
 from src.project.management_service.routers.link import router as link_router
+from src.project.management_service.routers.project import router as project_router
 from src.project.management_service.routers.role import router as role_router
 from src.project.management_service.routers.task import router as task_router
-from src.project.management_service.routers.history import router as history_router
-from src.project.management_service.routers.broker_router import router as broker
 from src.shared.config import CsrfConfig, origins, get_middleware_secret
-
 from src.shared.dependencies.service_deps import project_service
 from src.shared.dependencies.user_deps import current_user
-from src.shared.middlewares.token_middleware import RefreshTokenMiddleware
+from src.shared.mongo.db.database import database
 from src.shared.ws.socket import sio
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-
-    await db.connect("mongodb://localhost:27017", 'history-db')#указать имя и url базы Mongo
-    print("🚀 Приложение запущено")
+    logger.info("Приложение запущено 🚀")
+    logger.info("Соединение с MongoDB...")
+    await database.connect()
+    logger.info("Соединение - ✅")
+    logger.info("Инициализация MongoDB...")
+    await database.init()
+    logger.info("Инициализация - ✅")
     yield
-
-    # await db.close()
+    await database.close()
+    logger.info("Соединение с MongoDB закрыто")
     print("👋 Приложение остановлено")
 
 app = FastAPI(lifespan=lifespan)
@@ -48,7 +46,6 @@ socketio_app = socketio.ASGIApp(sio, other_asgi_app=app)
 def get_csrf_config():
     return CsrfConfig()
 
-
 app.add_middleware(SessionMiddleware, secret_key=get_middleware_secret())
 app.add_middleware(
     CORSMiddleware,
@@ -58,17 +55,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.add_middleware(RefreshTokenMiddleware)
-
-
-
 
 app.include_router(project_router)
 app.include_router(task_router)
 app.include_router(link_router)
 app.include_router(role_router)
-app.include_router(history_router)
-app.include_router(broker)
+app.include_router(audit)
 
 @app.get("/")
 async def main_page(user: current_user,

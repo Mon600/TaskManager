@@ -2,6 +2,8 @@ import datetime
 from typing import List, Optional, Union, Any, Dict
 from babel.dates import format_date
 from pydantic import field_validator, BaseModel, ConfigDict, model_validator, Field
+
+from src.shared.db.models import TaskPriority
 from src.shared.schemas.Assigneed_schemas import AssigneesModel
 
 class EditableTaskData(BaseModel):
@@ -17,13 +19,22 @@ class UpdateTaskSchema(EditableTaskData):
 
 
 class BaseTaskSchema(EditableTaskData):
+    id: int
     deadline: datetime.date
     started_at: datetime.datetime
-    completed_at: datetime.date
+    completed_at: Optional[datetime.date] = None
     is_ended: bool
     project_id: int
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class CreateTaskSchema(BaseModel):
+    name: str
+    description: str
+    deadline: datetime.date
+    priority: TaskPriority
+    assignees: list[int]
 
 
 class TaskSchema(BaseTaskSchema):
