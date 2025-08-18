@@ -1,21 +1,20 @@
 
-
+from asyncpg import PostgresError
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi_csrf_protect import CsrfProtect
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from starlette.requests import Request
-from starlette.responses import JSONResponse, RedirectResponse
+from starlette.responses import RedirectResponse
 
-from src.shared.dependencies.service_deps import project_service, auth_service, link_service, get_project_service
+from src.shared.dependencies.service_deps import link_service, members_service
 from src.shared.dependencies.user_deps import current_user, project_context
-from src.shared.mongo.db.models import LinkDeleteActionData
-from src.shared.schemas.Link_schemas import LinkSchema, GetLinksSchema
-
+from src.shared.mongo.db.models import LinkDeleteActionData, UserJoinActionData
+from src.shared.schemas.Link_schemas import LinkSchema, GetLinksSchema, GetLinkSchema
 
 router = APIRouter(prefix='/links', tags=['Links'])
 
 
-@router.post('/{project_id}/generate', status_code=201)
+@router.post('/{project_id}/generate')
 async def generate_url(project_member: project_context,
                        service: link_service,
                        data: LinkSchema,
@@ -34,61 +33,74 @@ async def generate_url(project_member: project_context,
 async def invite_page(request: Request,
                       user: current_user,
                       service: link_service,
-                      code: str):
-    res = await service.get_project_by_code(code)
-    project = res['project_rel']
-    expiry_date = res['end_at']
-    if project['status'] != 'open':
-        pass
-    context = {
-        'user': user,
-        'project': project,
-        'expiry_date': expiry_date,
-        'code': code,
-        'title': "Приглашение присоединиться к проекту"
-    }
-    return context
+                      code: str) -> GetLinkSchema:
+    if user is None:
+        raise HTTPException(status_code=401, detail="No authorized")
+    try:
+        link_info = await service.get_project_by_code(code)
+        if link_info.project_rel.status != 'open':
+            raise HTTPException(status_code=403, detail="No access: Проект закрыт")
+        return link_info
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Ссылка не найдена или устарела.")
+    except (SQLAlchemyError, PostgresError):
+        raise HTTPException(status_code=500, detail="Ошибка сервера. Попробуйте позже")
+
 
 @router.post('/invite/{code}/accept')
 async def accept_invite(user: current_user,
-                        p_service: project_service,
-                        l_service: link_service,
+                        service: members_service,
                         code: str
-                        ):
-    project = await l_service.get_project_by_code(code)
-    new_member = await p_service.add_member(project, user['id'])
-    if new_member is None:
+                        ) -> UserJoinActionData:
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not authorized")
+    try:
+        action = await service.add_member(code, user)
+        return action
+        # return RedirectResponse(f"http://127.0.0.1:800/project/{action.project_data.id}", status_code=303)
+    except IntegrityError:
+        raise HTTPException(status_code=403, detail="Вы уже участник проекта")
+    except KeyError:
         raise HTTPException(status_code=410, detail='link is expired')
-    elif new_member:
-        return RedirectResponse(f'/project/{project['project_rel']['id']}', status_code=303)
-
-    else:
-        return RedirectResponse('/', status_code=303)
+    except ValueError:
+        raise HTTPException(status_code=409, detail='Invalid data')
+    except (SQLAlchemyError, PostgresError):
+        raise HTTPException(status_code=500, detail='Ошибка сервера')
 
 
 @router.get('/{project_id}/links')
-async def project_links(user: current_user,
+async def project_links(context: project_context,
                         service: link_service,
                         project_id: int
                         ) -> list[GetLinksSchema]:
-    links = await service.get_links(project_id)
-    if links:
+    if not context:
+        raise HTTPException(401, "Not authorized")
+    if not context.member.role_rel.manage_links:
+        raise HTTPException(403, "No access")
+    try:
+        links = await service.get_links(project_id)
+        if not links:
+            raise HTTPException(404, f'No links for project with id {project_id}')
         return links
-    raise HTTPException(status_code=500, detail='Ошибка')
+    except (PostgresError, SQLAlchemyError):
+        raise HTTPException(500, 'Ошибка сервера.')
 
 
 @router.delete("/{project_id}/clear", status_code=200)
-async def delete_all_links(project_member: project_context,
+async def delete_all_links(context: project_context,
                            service: link_service,
                            project_id: int
                            ):
-    if not project_context.role_rel.manage_links:
+    if not context:
+        raise HTTPException(status_code=401, detail='Not authorized')
+    if not context.member.role_rel.manage_links:
         raise HTTPException(status_code=403, detail='No access')
-    result = await service.delete_all_links(project_id, project_context.user)
-    if result:
-        return{'ok': True}
-    else:
-        return {'ok': False}
+    try:
+        result = await service.delete_all_links(project_id, context.user)
+        return result
+    except KeyError:
+        raise HTTPException(404, "Links no found")
+
 
 @router.delete('/{project_id}/{link_code}/delete')
 async def delete_link_by_code(project_member: project_context,

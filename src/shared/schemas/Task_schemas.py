@@ -9,8 +9,7 @@ from src.shared.schemas.Assigneed_schemas import AssigneesModel
 class EditableTaskData(BaseModel):
     name: str
     description: str
-    priority: str
-    status: str
+    priority: TaskPriority
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -20,6 +19,7 @@ class UpdateTaskSchema(EditableTaskData):
 
 class BaseTaskSchema(EditableTaskData):
     id: int
+    status: str
     deadline: datetime.date
     started_at: datetime.datetime
     completed_at: Optional[datetime.date] = None
@@ -68,6 +68,7 @@ class TaskSchemaExtend(TaskSchema):
 
 class TaskGetSchema(EditableTaskData):
     id: int
+    status: str
     deadline: str
     started_at: str
     completed_at: Optional[str]

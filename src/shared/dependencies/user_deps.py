@@ -1,18 +1,15 @@
 import json
 import logging
+from typing import Annotated
 
 from fastapi.params import Depends
-from typing import Annotated, Union, Dict
-
+from redis import exceptions
 from starlette.requests import Request
-from starlette.responses import RedirectResponse
 
-from src.shared.db.models import ProjectMember
 from src.shared.dependencies.redis_deps import RedisDep
-
-from src.shared.dependencies.service_deps import auth_service, project_service, members_service
+from src.shared.dependencies.service_deps import auth_service, members_service
 from src.shared.jwt.jwt import decode_token
-from src.shared.schemas.Project_schemas import ProjectMemberSchema, ProjectContext
+from src.shared.schemas.Project_schemas import ProjectContext
 from src.shared.schemas.Role_schemas import RoleSchema
 from src.shared.schemas.User_schema import UserSchema
 
@@ -42,7 +39,7 @@ async def get_current_user(request: Request, service: auth_service, redis: Redis
                 cached = await redis.get(f"current_user{payload['user_id']}")
                 if not cached:
                     await redis.set(f"current_user{payload['user_id']}", user_schema.model_dump_json(), ex=3600)
-            except redis.exceptions.ConnectionError as e:
+            except exceptions.ConnectionError as e:
                 logger.warning(f"Redis недоступен: {e}")
             return user_schema
         else:

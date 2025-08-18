@@ -43,19 +43,28 @@ async def get_project_service(redis: RedisDep,
 
 project_service = Annotated[ProjectService, Depends(get_project_service)]
 
+async def get_link_service(repository: link_repository,
+                           service: project_service,
+                           redis: RedisDep,
+                           audit: audit_service
+                           ) -> LinkService:
+    return LinkService(repository, service, redis, audit)
+
+link_service = Annotated[LinkService, Depends(get_link_service)]
+
+async def get_members_service(repository: members_repository, links: link_service, audit: audit_service) -> MembersService:
+    return MembersService(repository, links, audit)
+
+members_service = Annotated[MembersService, Depends(get_members_service)]
+
+
+
 async def get_role_service(repository: role_repository, audit: audit_service) -> RoleService:
     return RoleService(repository, audit)
 
 role_service = Annotated[RoleService, Depends(get_role_service)]
 
-async def get_link_service(repository: link_repository,
-                           p_repository: project_repository,
-                           redis: RedisDep,
-                           audit: audit_service
-                           ) -> LinkService:
-    return LinkService(repository, p_repository, redis, audit)
 
-link_service = Annotated[LinkService, Depends(get_link_service)]
 
 
 async def get_task_service(repository: task_repository, audit: audit_service) -> TaskService:
@@ -64,7 +73,4 @@ async def get_task_service(repository: task_repository, audit: audit_service) ->
 task_service = Annotated[TaskService, Depends(get_task_service)]
 
 
-async def get_members_service(repository: members_repository, audit: audit_service) -> MembersService:
-    return MembersService(repository, audit)
 
-members_service = Annotated[MembersService, Depends(get_members_service)]

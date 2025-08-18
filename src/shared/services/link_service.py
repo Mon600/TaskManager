@@ -12,22 +12,22 @@ from redis.asyncio import Redis
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.shared.db.repositories.link_repository import LinkRepository
-from src.shared.db.repositories.project_repository import ProjectRepository
 from src.shared.mongo.db.models import LinkGenerateActionData, LinkDeleteActionData
 from src.shared.schemas.Link_schemas import LinkSchema, GetLinkSchema
 from src.shared.schemas.Project_schemas import ProjectRel
 from src.shared.schemas.User_schema import UserSchema
 from src.shared.services.audit_service import AuditService
+from src.shared.services.project_service import ProjectService
 
 
 class LinkService:
     def __init__(self,
                  repository: LinkRepository,
-                 p_repository: ProjectRepository,
+                 project: ProjectService,
                  redis: Redis,
                  audit: AuditService):
-        self.p_repository = p_repository
         self.repository = repository
+        self.project_service = project
         self.redis = redis
         self.audit = audit
         self.logger = logging.getLogger(__name__)
@@ -61,18 +61,18 @@ class LinkService:
     async def generate(self, data: LinkSchema, project_id: int, user: UserSchema) -> Optional[Dict[str, Any]]:
         user_id = user.id
         try:
-            project = await self.p_repository.get_by_id(project_id)
+            project = await self.project_service.get_project_by_id(project_id)
             if not project:
                 raise ValueError("Invalid project id")
 
-            project_data = ProjectRel.model_validate(project).model_dump()
+            project_data = project.model_dump()
             code = secrets.token_urlsafe(16)
             end_at, format_end_at = self._calculate_expiration(data.ex)
             cached_data = self._build_cache_data(project_data, format_end_at)
 
             await self._save_to_redis(code, cached_data, data.ex)
 
-            link = f"http://127.0.0.1:8000/project/invite/{code}"
+            link = f"http://127.0.0.1:8000/links/invite/{code}"
             data_for_save = {
                 "project_id": project_id,
                 "creator_id": user_id,
@@ -95,23 +95,48 @@ class LinkService:
             self.logger.warning(f"Ошибка при генерации ссылки: {e}")
             raise e
 
-
-    async def get_project_by_code(self, code: str):
+    async def get_project_by_code(self, code: str) -> GetLinkSchema:
+        data = None
         try:
             data = await self.redis.get(code)
-            data_dict = json.loads(data)
-            return data_dict
-        except:
-            project = await self.repository.get_by_code(code)
-            res = GetLinkSchema.model_validate(project, strict=False).model_dump()
-            await self.redis.set(code, json.dumps(res), ex=3600)
-            return res
+        except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError) as e:
+            self.logger.warning(f"Redis недоступен: {e}. Переход к базе данных.")
+        except Exception as e:
+            self.logger.error(f"Неожиданная ошибка при работе с Redis: {e}")
+        if data is not None:
+            try:
+                data_dict = json.loads(data)
+                return GetLinkSchema.model_validate(data_dict)
+            except (json.JSONDecodeError, Exception) as e:
+                self.logger.warning(f"Ошибка при разборе данных из Redis: {e}. Запрашиваем из БД.")
+        try:
+            current_date = datetime.datetime.now()
+            link_info = await self.repository.get_by_code(code, current_date)
+
+            if link_info is None:
+                raise KeyError(f"Ссылка с кодом '{code}' не найдена или просрочена.")
+
+            link = GetLinkSchema.model_validate(link_info)
+            try:
+                redis_ex_sec = 3600
+                if not link_info.end_at is None:
+                    ex_timestamp = int(link_info.end_at.timestamp() - current_date.timestamp())
+                    if ex_timestamp < 3600:
+                        redis_ex_sec = ex_timestamp
+                await self.redis.set(code, link.model_dump_json(), ex=redis_ex_sec)
+            except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError) as e:
+                self.logger.warning(f"Не удалось сохранить данные в Redis: {e}. Продолжаем без кэширования.")
+            return link
+        except (SQLAlchemyError, PostgresError) as e:
+            self.logger.error(f"Ошибка при получении проекта из базы данных: {e}")
+            raise e
+
 
 
     async def get_links(self, project_id: int):
         try:
-            nowdate = datetime.datetime.now()
-            links = await self.repository.get_by_project_id(project_id, nowdate)
+            current_date = datetime.datetime.now()
+            links = await self.repository.get_by_project_id(project_id, current_date)
             return links
         except (SQLAlchemyError, PostgresError) as e:
             self.logger.warning(f"Ошибка {e}")
@@ -119,12 +144,14 @@ class LinkService:
 
     async def delete_all_links(self, project_id, user: UserSchema):
         try:
-            res = await self.repository.delete_all_links(project_id)
-            if res:
-                data = LinkDeleteActionData(is_all=True)
-                await self.audit.log(project_id, user, data)
-                return True
-            return False
+            links = await self.repository.delete_all_links(project_id)
+
+            if not links:
+                raise KeyError("Links not found")
+            data = LinkDeleteActionData(is_all=True, link=links)
+            await self.audit.log(project_id, user, data)
+            return data
+
         except (SQLAlchemyError, PostgresError) as e:
             self.logger.warning(f"Ошибка {e}")
             raise e
@@ -132,9 +159,9 @@ class LinkService:
 
     async def delete_link_by_code(self, link_code: str, project_id: int, user: UserSchema) -> LinkDeleteActionData:
         try:
-            await self.repository.delete_by_code(link_code)
+            link = await self.repository.delete_by_code(link_code, project_id)
             try:
-                data = LinkDeleteActionData(link=link_code)
+                data = LinkDeleteActionData(link=[link])
                 await self.audit.log(project_id, user, data)
                 return data
             except ValueError as e:

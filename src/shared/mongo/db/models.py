@@ -6,9 +6,10 @@ from pydantic import BaseModel, Field
 from pydantic import model_validator
 from pymongo import IndexModel
 
-from src.shared.schemas.Project_schemas import ProjectMemberSchemaExtend, ProjectData
+from src.shared.schemas.Link_schemas import LinkSchemaExtend
+from src.shared.schemas.Project_schemas import ProjectMemberSchemaExtend, ProjectData, ProjectRel
 from src.shared.schemas.Role_schemas import RoleSchema, RoleSchemaWithId
-from src.shared.schemas.Task_schemas import TaskGetSchema
+from src.shared.schemas.Task_schemas import TaskGetSchema, BaseTaskSchema
 from src.shared.schemas.User_schema import UserSchema
 
 
@@ -47,7 +48,7 @@ class CreateTaskActionData(BaseActionData):
 
 class DeleteTaskActionData(BaseActionData):
     action_type: Literal["delete_task"] = "delete_task"
-    deleted_task: TaskGetSchema
+    deleted_task: BaseTaskSchema
 
 
 class ChangeTaskActionData(BaseActionData):
@@ -58,7 +59,7 @@ class ChangeTaskActionData(BaseActionData):
 
 class CompleteTaskActionData(BaseActionData):
     action_type: Literal['complete_task'] = "complete_task"
-    completed_task: TaskGetSchema
+    completed_task: BaseTaskSchema
 
 
 class LinkGenerateActionData(BaseActionData):
@@ -69,14 +70,14 @@ class LinkGenerateActionData(BaseActionData):
 class LinkDeleteActionData(BaseActionData):
     action_type: Literal["delete_link"] = "delete_link"
     is_all: Optional[bool] = Field(default=False)
-    link: Optional[str] = ""
+    link: list[LinkSchemaExtend]
 
     @model_validator(mode='before')
     @classmethod
     def validate(cls, data: Union[Dict[str, Any], Any]) -> Union[Dict[str, Any], Any]:
         if isinstance(data, dict):
-            if (data.get('is_all', False) and data.get('link')) or (
-                    not data.get('is_all', False) and not data.get('link')):
+            if (data.get('is_all', False) and (len(data.get('link')) == 1)) or (
+                    not data.get('is_all', False) and (data.get('link'))):
                 raise ValueError("You can delete one OR all links.")
         return data
 
@@ -120,6 +121,7 @@ class ChangeProjectActionData(BaseActionData):
 
 class UserJoinActionData(BaseActionData):
     action_type: Literal["user_joined"] = "user_joined"
+    project_data: ProjectRel
 
 
 class History(Document):
@@ -129,6 +131,7 @@ class History(Document):
             DeleteUserActionData,
             ChangeRoleActionData,
             CreateTaskActionData,
+            CompleteTaskActionData,
             DeleteTaskActionData,
             ChangeTaskActionData,
             LinkGenerateActionData,

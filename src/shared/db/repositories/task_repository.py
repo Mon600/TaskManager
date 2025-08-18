@@ -65,7 +65,6 @@ class TaskRepository(BaseRepository):
 
         count_db = await self.session.execute(count_stmt)
         counters = count_db.first()
-        print(counters)
         return {
             'tasks': all_tasks,
             'total_tasks_count': counters[0],
@@ -107,9 +106,12 @@ class TaskRepository(BaseRepository):
         return res.scalars().all()
 
 
-    async def get_task(self, task_id:int) -> TaskGetSchema:
+    async def get_task(self, task_id:int, project_id: int) -> TaskGetSchema:
         stmt = (select(Task)
-                .where(Task.id == task_id)
+                .where(
+            Task.id == task_id,
+            Task.project_id == project_id
+        )
                 .options(
                         selectinload(Task.assignees_rel)
                         .load_only(TaskAssignee.project_member_id)
@@ -119,6 +121,8 @@ class TaskRepository(BaseRepository):
                 )
         task = await self.session.execute(stmt)
         task_db =  task.scalars().one_or_none()
+        if task_db is None:
+            raise KeyError("Task no found")
         task_schema = TaskGetSchema.model_validate(task_db)
         return task_schema
 
@@ -201,7 +205,7 @@ class TaskRepository(BaseRepository):
         }
 
 
-    async def complete_task(self, task_id: int, current_date: datetime.date) -> TaskGetSchema:
+    async def complete_task(self, task_id: int, current_date: datetime.date) -> BaseTaskSchema:
         stmt = (update(Task)
                 .where(Task.id == task_id, Task.status != 'completed')
                 .values(
@@ -213,10 +217,12 @@ class TaskRepository(BaseRepository):
         res = await self.session.execute(stmt)
         await self.session.commit()
         task_db = res.scalars().one_or_none()
-        task_schema = TaskGetSchema.model_validate(task_db)
+        if task_db is None:
+            raise KeyError("Task not found")
+        task_schema = BaseTaskSchema.model_validate(task_db)
         return task_schema
 
-    async def delete_task(self, task_id: int) -> TaskGetSchema:
+    async def delete_task(self, task_id: int) -> BaseTaskSchema:
         stmt = (
             delete(Task)
             .where(Task.id == task_id)
@@ -224,7 +230,7 @@ class TaskRepository(BaseRepository):
                 )
         result = await self.session.execute(stmt)
         task_db = result.scalars().one()
-        task_schema = TaskGetSchema.model_validate(task_db)
+        task_schema = BaseTaskSchema.model_validate(task_db)
         return task_schema
 
 

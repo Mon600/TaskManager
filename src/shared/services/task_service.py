@@ -51,10 +51,8 @@ class TaskService:
         try:
             task_id = await self.repository.create_task(task, assignees, project_id)
 
-            task = await self.repository.get_task(task_id)
+            task = await self.repository.get_task(task_id, project_id)
             data = CreateTaskActionData(created_task=task)
-            print(data)
-            print(task)
             await self.audit.log(project_id, user, data)
             return data
         except (SQLAlchemyError, PostgresError) as e:
@@ -64,7 +62,7 @@ class TaskService:
     async def update_task(self,
                           data: UpdateTaskSchema,
                           task_id: int, project_id: int,
-                          user: UserSchema) -> TaskGetSchema | None:
+                          user: UserSchema) -> ChangeTaskActionData:
         task = data.model_dump()
         new_assignees = task.pop('assignees')
 
@@ -76,6 +74,8 @@ class TaskService:
 
             new_task = tasks['new_task_data']
             old_task = tasks['old_task_data']
+            if not (old_task or new_task):
+                raise KeyError("No tasks with received parameters")
             new_task_result_schema = TaskGetSchema(
                 **new_task.model_dump(),
                 assignees_rel=new_assignees_schema
@@ -85,16 +85,14 @@ class TaskService:
                 assignees_rel=old_assignees_schema
             )
 
-
-            if (new_task and old_task) and (new_task != old_task):
-                data = ChangeTaskActionData.model_validate({
-                    "new_data": new_task_result_schema,
-                    "old_data": old_task_result_schema
-                })
-                await self.audit.log(project_id, user, data)
-
-                return new_task_result_schema
-            return None
+            if new_task == old_task:
+                raise ValueError('Old data and new data the same')
+            data = ChangeTaskActionData.model_validate({
+                "new_data": new_task_result_schema,
+                "old_data": old_task_result_schema
+            })
+            await self.audit.log(project_id, user, data)
+            return data
         except ValueError as e:
             self.logger.warning(f"Ошибка: {e}")
             raise e
@@ -120,8 +118,22 @@ class TaskService:
             completed_at = datetime.date.today()
             completed_task = await self.repository.complete_task(task_id, completed_at)
             data = CompleteTaskActionData(completed_task=completed_task)
-            self.audit.log(project_id, user, data)
-            return res
+            await self.audit.log(project_id, user, data)
+            return data
+        except KeyError as e:
+            self.logger.warning(f"Ошибка: {str(e)}")
+            raise e
+        except (SQLAlchemyError, PostgresError) as e:
+            self.logger.warning(f"Ошибка: {e}")
+            raise e
+
+    async def get_task(self, task_id: int, project_id: int) -> TaskGetSchema:
+        try:
+            task = await self.repository.get_task(task_id, project_id)
+            return task
+        except KeyError as  e:
+            self.logger.warning(f"Ошибка: {e}")
+            raise e
         except (SQLAlchemyError, PostgresError) as e:
             self.logger.warning(f"Ошибка {e}")
-            return False
+            raise e
