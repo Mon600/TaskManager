@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import smtplib
 import logging
@@ -57,13 +58,24 @@ def send_mail_task(self, to: str, subject: str, body: str):
 
 
 @app.task(bind=True, max_retries=3)
-async def clear_links(self):
+def clear_links(self):
+    try:
+        # loop = asyncio.get_event_loop()
+        # loop.run_until_complete(clear_links_async())
+        asyncio.run(clear_links_async())
+    except Exception as e:
+        logger.warning(f'{e}')
+        self.retry(countdown=5)
+
+async def clear_links_async():
     current_date = datetime.datetime.now()
     async with async_session() as session:
         try:
             stmt = delete(ProjectLink).where(ProjectLink.end_at <= current_date)
             await session.execute(stmt)
             await session.commit()
+            print("Задача выполнена")
         except Exception as exc:
             logger.warning(f"Error: {exc}")
-            raise self.retry(exc=exc, countdown=60)
+            raise exc
+

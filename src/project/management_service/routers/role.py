@@ -27,31 +27,36 @@ async def get_roles(user: current_user,
 
 
 @router.post("/project/{project_id}/new")
-async def add_role(user: current_user,
+async def add_role(context: project_context,
                    project_id: int,
                    service: role_service,
                    data: RoleSchema,
                    csrf_protect: CsrfProtect = Depends()) -> CreateRoleActionData:
+    if not context:
+        raise HTTPException(401, 'Not authorized')
+    if not context.member.role_rel.change_roles: #сделать create_role!!!
+        raise HTTPException(403, 'No access')
     try:
         # await csrf_protect.validate_csrf(request)
-        action = await service.new_role(project_id, user, data)
+        action = await service.new_role(project_id, context.user, data)
         return action
     except SQLAlchemyError as e:
         raise HTTPException(status_code=500, detail=e)
 
 
 @router.put("/project/{project_id}/role/{role_id}/update")
-async def update_role(request: Request,
-                      project_member: project_context,
+async def update_role(context: project_context,
                       project_id: int,
                       data: RoleSchema,
                       role_id: int,
                       service: role_service,
                       csrf_protect: CsrfProtect = Depends()) -> EditRoleActionData:
+    if not context:
+        raise HTTPException(401, 'Not authorized')
     try:
         # await csrf_protect.validate_csrf(request)
-        if project_member.member.role_rel.change_roles:
-            action = await service.role_update(role_id, data, project_member.user, project_id)
+        if context.member.role_rel.change_roles:
+            action = await service.role_update(role_id, data, context.user, project_id)
             return action
         else:
             raise HTTPException(status_code=403, detail="No access")
@@ -73,7 +78,8 @@ async def delete_role(request: Request,
     # await csrf_protect.validate_csrf(request)
     if project_member.member.role_rel.change_roles:
         try:
-            await service.role_delete(role_id, project_id, project_member.user)
+            result = await service.role_delete(role_id, project_id, project_member.user)
+            return result
         except (SQLAlchemyError, PostgresError) as e:
             raise HTTPException(status_code=500, detail=e)
     else:
@@ -82,7 +88,7 @@ async def delete_role(request: Request,
 
 @router.put("/{project_id}/member/{member_id}/update-role/{role_id}")
 
-async def change_role(request: Request,
+async def change_member_role(request: Request,
                       project_member: project_context,
                       project_id: int,
                       member_id: int,

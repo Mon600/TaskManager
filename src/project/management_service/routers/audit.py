@@ -10,7 +10,7 @@ router = APIRouter(prefix='/history', tags=['History'])
 async def get_all_history(user: current_user,
                           project_id: int,
                           service: audit_service):
-    result = await service.get_history(project_id)
+    result = await service.get_audit(project_id)
     return result
 
 
@@ -19,5 +19,5 @@ async def get_filtered_history(user: current_user,
                                project_id: int,
                                service: audit_service,
                                filters: FiltersDep):
-    result = await service.get_filtered_history(project_id, filters)
+    result = await service.get_filtered_audit(project_id, filters)
     return result

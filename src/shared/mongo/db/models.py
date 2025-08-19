@@ -76,8 +76,8 @@ class LinkDeleteActionData(BaseActionData):
     @classmethod
     def validate(cls, data: Union[Dict[str, Any], Any]) -> Union[Dict[str, Any], Any]:
         if isinstance(data, dict):
-            if (data.get('is_all', False) and (len(data.get('link')) == 1)) or (
-                    not data.get('is_all', False) and (data.get('link'))):
+            if ((data.get('is_all', False) == False) and (len(data.get('link')) > 1)) or (
+                    (data.get('is_all', False)) == True and (not data.get('link'))):
                 raise ValueError("You can delete one OR all links.")
         return data
 

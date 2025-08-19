@@ -25,9 +25,16 @@ class RoleRepository(BaseRepository):
 
 
     async def delete_role(self, role_id: int, project_id: int):
-        stmt = delete(Role).where(Role.id == role_id, Role.project_id == project_id).returning(Role)
+        stmt = (delete(Role)
+                .where(
+            Role.id == role_id,
+            Role.project_id == project_id
+        )
+                .returning(Role)
+                )
         result = await self.session.execute(stmt)
-        role_db = result.scalars().first()
+        role_db = result.scalars().one_or_none()
+        print(role_db)
         role_schema = RoleSchema.model_validate(role_db)
         return role_schema
 

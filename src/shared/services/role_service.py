@@ -65,12 +65,13 @@ class RoleService:
             self.logger.warning(f"Ошибка: {e}")
             raise e
 
-    async def role_delete(self, project_id: int, role_id: int, user: UserSchema):
+    async def role_delete(self, role_id: int, project_id: int, user: UserSchema):
         try:
             deleted_role = await self.repository.delete_role(role_id, project_id)
             try:
                 data = DeleteRoleActionData(deleted_role=deleted_role, role_id=role_id)
                 await self.audit.log(project_id, user, data)
+                return data
             except ValueError as e:
                 self.logger.warning(f"Ошибка: {str(e)}")
                 raise e

@@ -145,7 +145,7 @@ class LinkService:
     async def delete_all_links(self, project_id, user: UserSchema):
         try:
             links = await self.repository.delete_all_links(project_id)
-
+            print(links)
             if not links:
                 raise KeyError("Links not found")
             data = LinkDeleteActionData(is_all=True, link=links)

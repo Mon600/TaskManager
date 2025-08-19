@@ -29,7 +29,7 @@ celery_app.conf.update(
 
 celery_app.conf.beat_schedule = {
     'run-every-hour': {
-        'task': 'tasks.clear_links',
+        'task': 'src.project.email_service.celery_worker.tasks.clear_links',
         'schedule': 3600.0,
     },
 }

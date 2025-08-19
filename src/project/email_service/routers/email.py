@@ -19,7 +19,7 @@ async def send_mail(request: Request,
                     email: str =  Form(...)):
     if user is None:
         return RedirectResponse('/auth')
-    code = await service.generate_code(email, user['id'])
+    code = await service.generate_code(email, user.id)
     subject = "Подтверждение email"
     body = f"""
     <!DOCTYPE html>

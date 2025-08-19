@@ -66,12 +66,9 @@ class TriggersManager:
         CREATE OR REPLACE FUNCTION protect_default_or_creator_role()
         RETURNS TRIGGER AS $$
         BEGIN
-            -- Проверяем, является ли роль ролью по умолчанию
             IF EXISTS (SELECT 1 FROM projects WHERE default_role_id = OLD.id) THEN
                 RAISE EXCEPTION 'Cannot delete default role. Role ID: % is used as default role', OLD.id;
             END IF;
-
-            -- Проверяем, является ли роль ролью создателя (priority = 10)
             IF OLD.priority = 10 THEN
                 RAISE EXCEPTION 'Cannot delete creator role. Role ID: % has priority 10', OLD.id;
             END IF;
@@ -98,9 +95,7 @@ class TriggersManager:
         DECLARE
             is_default_role BOOLEAN;
         BEGIN
-            -- Защита роли создателя (priority = 10)
             IF OLD.priority = 10 THEN
-                -- Запрещаем изменять всё, кроме имени
                 IF NEW.priority != OLD.priority OR
                    NEW.create_tasks != OLD.create_tasks OR
                    NEW.delete_tasks != OLD.delete_tasks OR
@@ -138,15 +133,6 @@ class TriggersManager:
             RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
-        """
-
-    @staticmethod
-    def get_protect_important_roles_triggers_on_delete():
-        return """
-        CREATE TRIGGER protect_important_roles_delete
-            BEFORE DELETE ON roles
-            FOR EACH ROW
-            EXECUTE FUNCTION protect_important_roles();
         """
 
     @staticmethod
