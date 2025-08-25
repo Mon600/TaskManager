@@ -5,13 +5,14 @@ from fastapi import Depends
 from src.shared.dependencies.redis_deps import RedisDep
 from src.shared.dependencies.repository_deps import user_repository, project_repository, role_repository, \
     link_repository, \
-    token_repository, task_repository, mongo_repository, members_repository
+    token_repository, task_repository, mongo_repository, members_repository, stat_repository
 from src.shared.services.audit_service import AuditService
 from src.shared.services.auth_service import AuthService
 from src.shared.services.link_service import LinkService
 from src.shared.services.members_service import MembersService
 from src.shared.services.project_service import ProjectService
 from src.shared.services.role_service import RoleService
+from src.shared.services.statistic_service import StatisticService
 from src.shared.services.task_service import TaskService
 from src.shared.services.user_service import UserService
 
@@ -71,6 +72,13 @@ async def get_task_service(repository: task_repository, audit: audit_service) ->
     return TaskService(repository, audit)
 
 task_service = Annotated[TaskService, Depends(get_task_service)]
+
+
+async def get_stat_service(repository: stat_repository):
+    return StatisticService(repository)
+
+
+stat_service = Annotated[StatisticService, Depends(get_stat_service)]
 
 
 

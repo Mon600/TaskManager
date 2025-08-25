@@ -7,6 +7,7 @@ from src.shared.db.repositories.link_repository import LinkRepository
 from src.shared.db.repositories.project_member_repository import ProjectMemberRepository
 from src.shared.db.repositories.project_repository import ProjectRepository
 from src.shared.db.repositories.role_repository import RoleRepository
+from src.shared.db.repositories.statistic_repository import StatisticRepository
 from src.shared.db.repositories.task_repository import TaskRepository
 from src.shared.db.repositories.token_repository import TokenRepository
 from src.shared.db.repositories.user_repository import UserRepository
@@ -68,3 +69,10 @@ async def get_mongo_repository() -> MongoRepository:
 
 
 mongo_repository = Annotated[MongoRepository, Depends(get_mongo_repository)]
+
+
+async def get_stat_repository(session: SessionDep) -> StatisticRepository:
+    return StatisticRepository(session)
+
+
+stat_repository = Annotated[StatisticRepository, Depends(get_stat_repository)]

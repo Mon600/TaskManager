@@ -127,6 +127,7 @@ class UserJoinActionData(BaseActionData):
 class History(Document):
     project_id: int
     user: UserSchema
+    created_at: datetime = Field(default=datetime.now())
     action: Union[
             DeleteUserActionData,
             ChangeRoleActionData,
@@ -163,7 +164,7 @@ class History(Document):
         name = "history"
         indexes = [
             "project_id",
-            "user.id"
+            "user.id",
             "action.action_type",
             "timestamp",
             IndexModel([('created_at', 1)],

@@ -85,14 +85,18 @@ async def refresh(request: Request, service: auth_service, response: Response):
         raise HTTPException(status_code=401, detail='Not Authorized')
     # response = Response()
     token = await service.refresh(refresh_token)
-    response.set_cookie('access_token',
-                        token['token'],
-                        # max_age=1800,
-                        secure=False,
-                        httponly=True,
-                        samesite="lax"
-                        )
-    return {'access_token': token['token']}
+    if token:
+        response.set_cookie('access_token',
+                            token['token'],
+                            # max_age=1800,
+                            secure=False,
+                            httponly=True,
+                            samesite="lax"
+                            )
+        return {'access_token': token['token']}
+    else:
+        response.delete_cookie('refresh_token')
+        raise HTTPException(status_code=403, detail="Invalid refresh")
 
 @router.get("/logout")
 async def logout(request: Request, service: auth_service):
