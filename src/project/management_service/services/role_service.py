@@ -3,13 +3,13 @@ import logging
 from asyncpg import PostgresError
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.shared.db.repositories.role_repository import RoleRepository
-from src.shared.mongo.db.models import ChangeUserRoleActionData, DeleteRoleActionData, \
+from src.project.management_service.repositories.role_repository import RoleRepository
+from src.project.management_service.mongo.db.models import ChangeUserRoleActionData, DeleteRoleActionData, \
     EditRoleActionData, CreateRoleActionData
 from src.shared.schemas.Project_schemas import ProjectMemberSchemaExtend
 from src.shared.schemas.Role_schemas import RoleSchema
 from src.shared.schemas.User_schema import UserSchema
-from src.shared.services.audit_service import AuditService
+from src.project.management_service.services.audit_service import AuditService
 
 
 class RoleService:

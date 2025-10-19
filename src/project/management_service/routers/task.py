@@ -10,7 +10,7 @@ from starlette.requests import Request
 
 from src.shared.dependencies.service_deps import task_service
 from src.shared.dependencies.user_deps import current_user, project_context
-from src.shared.mongo.db.models import ChangeTaskActionData, CreateTaskActionData, DeleteTaskActionData, \
+from src.project.management_service.mongo.db.models import ChangeTaskActionData, CreateTaskActionData, DeleteTaskActionData, \
     CompleteTaskActionData
 from src.shared.schemas.FilterSchemas import TaskFilter
 from src.shared.schemas.Task_schemas import TaskGetSchema, UpdateTaskSchema, CreateTaskSchema

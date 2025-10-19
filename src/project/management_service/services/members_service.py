@@ -4,13 +4,12 @@ import pymongo.errors
 from asyncpg import PostgresError
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.shared.db.repositories.project_member_repository import ProjectMemberRepository
-from src.shared.mongo.db.models import DeleteUserActionData, UserJoinActionData
-from src.shared.schemas.Link_schemas import GetLinkSchema
+from src.project.management_service.repositories.project_member_repository import ProjectMemberRepository
+from src.project.management_service.mongo.db.models import DeleteUserActionData, UserJoinActionData
 from src.shared.schemas.Project_schemas import ProjectMemberSchema
 from src.shared.schemas.User_schema import UserSchema
-from src.shared.services.audit_service import AuditService
-from src.shared.services.link_service import LinkService
+from src.project.management_service.services.audit_service import AuditService
+from src.project.management_service.services.link_service import LinkService
 
 
 class MembersService:

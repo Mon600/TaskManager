@@ -8,7 +8,7 @@ from starlette.requests import Request
 
 from src.shared.dependencies.redis_deps import RedisDep
 from src.shared.dependencies.service_deps import auth_service, members_service
-from src.shared.jwt.jwt import decode_token
+from src.project.auth_service.jwt.jwt import decode_token
 from src.shared.schemas.Project_schemas import ProjectContext
 from src.shared.schemas.Role_schemas import RoleSchema
 from src.shared.schemas.User_schema import UserSchema

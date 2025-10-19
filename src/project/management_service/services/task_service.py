@@ -5,14 +5,14 @@ from typing import Dict, Any
 from asyncpg import PostgresError
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.shared.db.repositories.task_repository import TaskRepository
-from src.shared.mongo.db.models import ChangeTaskActionData, CompleteTaskActionData, CreateTaskActionData, \
+from src.project.management_service.repositories.task_repository import TaskRepository
+from src.project.management_service.mongo.db.models import ChangeTaskActionData, CompleteTaskActionData, CreateTaskActionData, \
     DeleteTaskActionData
 from src.shared.schemas.FilterSchemas import TaskFilter
-from src.shared.schemas.Task_schemas import TaskGetSchema, BaseTaskSchema, TaskSchema, UpdateTaskSchema, \
+from src.shared.schemas.Task_schemas import TaskGetSchema, UpdateTaskSchema, \
     CreateTaskSchema
 from src.shared.schemas.User_schema import UserSchema
-from src.shared.services.audit_service import AuditService
+from src.project.management_service.services.audit_service import AuditService
 
 
 class TaskService:

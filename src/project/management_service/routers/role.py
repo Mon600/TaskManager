@@ -3,12 +3,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi_csrf_protect import CsrfProtect
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.requests import Request
-from starlette.responses import JSONResponse
 
-
-from src.shared.dependencies.service_deps import role_service, get_project_service
+from src.shared.dependencies.service_deps import role_service
 from src.shared.dependencies.user_deps import current_user, project_context
-from src.shared.mongo.db.models import EditRoleActionData, CreateRoleActionData
+from src.project.management_service.mongo.db.models import EditRoleActionData, CreateRoleActionData
 from src.shared.schemas.Role_schemas import RoleSchema, RoleSchemaWithId
 
 router = APIRouter(prefix='/roles', tags=['Roles'])

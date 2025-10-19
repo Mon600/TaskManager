@@ -1,18 +1,17 @@
 from typing import Annotated
 
 from fastapi import Depends
-from faststream import Depends as Depends_fs
 
-from src.shared.db.repositories.link_repository import LinkRepository
-from src.shared.db.repositories.project_member_repository import ProjectMemberRepository
-from src.shared.db.repositories.project_repository import ProjectRepository
-from src.shared.db.repositories.role_repository import RoleRepository
-from src.shared.db.repositories.statistic_repository import StatisticRepository
-from src.shared.db.repositories.task_repository import TaskRepository
-from src.shared.db.repositories.token_repository import TokenRepository
+from src.project.management_service.repositories.link_repository import LinkRepository
+from src.project.management_service.repositories.project_member_repository import ProjectMemberRepository
+from src.project.management_service.repositories.project_repository import ProjectRepository
+from src.project.management_service.repositories.role_repository import RoleRepository
+from src.project.statistics_service.repositories.statistic_repository import StatisticRepository
+from src.project.management_service.repositories.task_repository import TaskRepository
+from src.project.auth_service.repositories.token_repository import TokenRepository
 from src.shared.db.repositories.user_repository import UserRepository
-from src.shared.dependencies.db_deps import SessionDep, get_session
-from src.shared.mongo.repositories.mongo_repositroy import MongoRepository
+from src.shared.dependencies.db_deps import SessionDep
+from src.project.management_service.mongo.repositories.mongo_repositroy import MongoRepository
 
 
 async def get_user_repository(session: SessionDep) -> UserRepository:

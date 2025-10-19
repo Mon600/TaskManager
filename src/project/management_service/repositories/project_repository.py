@@ -50,7 +50,6 @@ class ProjectRepository(BaseRepository):
 
 
     async def get_projects_by_user_id(self, user_id):
-        # selectinload(ProjectMember.user_rel)
         stmt = select(ProjectMember).where(ProjectMember.user_id == user_id).options(
             selectinload(ProjectMember.project_rel)
             )

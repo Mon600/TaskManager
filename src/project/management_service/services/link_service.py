@@ -11,13 +11,12 @@ from babel.dates import format_datetime
 from redis.asyncio import Redis
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.shared.db.repositories.link_repository import LinkRepository
-from src.shared.mongo.db.models import LinkGenerateActionData, LinkDeleteActionData
+from src.project.management_service.repositories.link_repository import LinkRepository
+from src.project.management_service.mongo.db.models import LinkGenerateActionData, LinkDeleteActionData
 from src.shared.schemas.Link_schemas import LinkSchema, GetLinkSchema
-from src.shared.schemas.Project_schemas import ProjectRel
 from src.shared.schemas.User_schema import UserSchema
-from src.shared.services.audit_service import AuditService
-from src.shared.services.project_service import ProjectService
+from src.project.management_service.services.audit_service import AuditService
+from src.project.management_service.services.project_service import ProjectService
 
 
 class LinkService:

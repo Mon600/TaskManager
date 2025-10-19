@@ -1,7 +1,5 @@
-from typing import Dict, Any
-
 from src.shared.schemas.FilterSchemas import HistoryFilter
-from src.shared.mongo.db.models import BaseActionData, History
+from src.project.management_service.mongo.db.models import BaseActionData, History
 from src.shared.schemas.User_schema import UserSchema
 
 

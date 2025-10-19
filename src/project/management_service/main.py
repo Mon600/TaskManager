@@ -17,7 +17,7 @@ from src.project.management_service.routers.task import router as task_router
 from src.shared.config import CsrfConfig, origins, get_middleware_secret
 from src.shared.dependencies.service_deps import project_service
 from src.shared.dependencies.user_deps import current_user
-from src.shared.mongo.db.database import database
+from src.project.management_service.mongo.db.database import database
 from src.shared.ws.socket import sio
 
 logger = logging.getLogger(__name__)

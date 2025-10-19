@@ -8,8 +8,8 @@ from jose import JWTError
 from redis.asyncio import Redis
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.shared.db.repositories.token_repository import TokenRepository
-from src.shared.jwt.jwt import create_token, decode_token
+from src.project.auth_service.repositories.token_repository import TokenRepository
+from src.project.auth_service.jwt.jwt import create_token, decode_token
 from src.shared.db.repositories.user_repository import UserRepository
 from src.shared.schemas.Token_schemas import TokenModel
 from src.shared.schemas.User_schema import UserSchema

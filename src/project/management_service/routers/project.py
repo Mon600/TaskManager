@@ -2,18 +2,17 @@ from typing import Dict, Union
 
 import pymongo.errors
 from asyncpg import PostgresError
-from fastapi import APIRouter, Form, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi_csrf_protect import CsrfProtect
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.requests import Request
-from starlette.responses import RedirectResponse, JSONResponse
+from starlette.responses import RedirectResponse
 
 from src.shared.decorators.decorators import is_user
 from src.shared.dependencies.user_deps import current_user, project_context
 from src.shared.schemas.Project_schemas import ProjectData, ProjectMemberSchemaExtend, ProjectDataGet
-from src.shared.dependencies.service_deps import project_service, task_service, get_project_service, members_service
-from src.shared.mongo.db.models import ChangeDefaultRoleData, ChangeProjectActionData, DeleteUserActionData
-from src.shared.schemas.Role_schemas import RoleSchemaWithId
+from src.shared.dependencies.service_deps import project_service, members_service
+from src.project.management_service.mongo.db.models import ChangeDefaultRoleData, ChangeProjectActionData, DeleteUserActionData
 
 router = APIRouter(prefix="/project", tags=['Project',])
 

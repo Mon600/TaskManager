@@ -1,10 +1,10 @@
-from typing import Optional, Dict, Any
+from typing import Optional
 
 from beanie import init_beanie
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
 from src.shared.config import get_mongo_db_url, get_mongo_db_name
-from src.shared.mongo.db.models import History, BaseActionData
+from src.project.management_service.mongo.db.models import History
 
 
 class Database:

@@ -1,12 +1,9 @@
 import logging
-from typing import Union
 
 import pymongo.errors
 
-from src.shared.mongo.db.models import DeleteUserActionData, ChangeRoleActionData, ChangeTaskActionData, \
-    LinkGenerateActionData, LinkDeleteActionData, ChangeUserRoleActionData, ChangeDefaultRoleData, \
-    ChangeProjectActionData, UserJoinActionData, BaseActionData
-from src.shared.mongo.repositories.mongo_repositroy import MongoRepository
+from src.project.management_service.mongo.db.models import BaseActionData
+from src.project.management_service.mongo.repositories.mongo_repositroy import MongoRepository
 from src.shared.schemas.FilterSchemas import HistoryFilter
 from src.shared.schemas.User_schema import UserSchema
 

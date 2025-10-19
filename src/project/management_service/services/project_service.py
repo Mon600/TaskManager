@@ -4,11 +4,11 @@ from asyncpg import PostgresError
 from redis.asyncio import Redis
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.shared.db.repositories.project_repository import ProjectRepository
-from src.shared.mongo.db.models import ChangeDefaultRoleData, ChangeProjectActionData
+from src.project.management_service.repositories.project_repository import ProjectRepository
+from src.project.management_service.mongo.db.models import ChangeDefaultRoleData, ChangeProjectActionData
 from src.shared.schemas.Project_schemas import ProjectData, ProjectFromMember, ProjectMemberSchemaExtend, ProjectRel
 from src.shared.schemas.User_schema import UserSchema
-from src.shared.services.audit_service import AuditService
+from src.project.management_service.services.audit_service import AuditService
 
 
 class ProjectService:

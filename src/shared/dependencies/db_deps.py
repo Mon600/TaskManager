@@ -1,12 +1,11 @@
 from typing import Annotated, AsyncGenerator
 
-import pymongo.errors
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
 from src.shared.config import async_session
-from src.shared.mongo.db.database import Database, database
+from src.project.management_service.mongo.db.database import Database, database
 
 
 async def get_session() -> AsyncGenerator:

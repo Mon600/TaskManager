@@ -4,11 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi_csrf_protect import CsrfProtect
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from starlette.requests import Request
-from starlette.responses import RedirectResponse
 
 from src.shared.dependencies.service_deps import link_service, members_service
 from src.shared.dependencies.user_deps import current_user, project_context
-from src.shared.mongo.db.models import LinkDeleteActionData, UserJoinActionData
+from src.project.management_service.mongo.db.models import LinkDeleteActionData, UserJoinActionData
 from src.shared.schemas.Link_schemas import LinkSchema, GetLinksSchema, GetLinkSchema
 
 router = APIRouter(prefix='/links', tags=['Links'])
