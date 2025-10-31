@@ -1,17 +1,18 @@
+from functools import partial
 from typing import Union
 
 from asyncpg import PostgresError
 from fastapi import APIRouter, Depends
 from fastapi.params import Query
-from fastapi_csrf_protect import CsrfProtect
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException
 from starlette.requests import Request
 
-from src.shared.dependencies.service_deps import task_service
-from src.shared.dependencies.user_deps import current_user, project_context
-from src.project.management_service.mongo.db.models import ChangeTaskActionData, CreateTaskActionData, DeleteTaskActionData, \
+from src.project.management_service.mongo.db.models import ChangeTaskActionData, CreateTaskActionData, \
+    DeleteTaskActionData, \
     CompleteTaskActionData
+from src.shared.dependencies.service_deps import task_service
+from src.shared.dependencies.user_deps import current_user, project_context, required_rights
 from src.shared.schemas.FilterSchemas import TaskFilter
 from src.shared.schemas.Task_schemas import TaskGetSchema, UpdateTaskSchema, CreateTaskSchema
 from src.shared.schemas.pagination import PaginationDep
@@ -22,75 +23,53 @@ router = APIRouter(prefix='/tasks', tags=['Tasks'])
 
 @router.post('/project/{project_id}/create')
 async def create_task(project_id: int,
-                      project_member: project_context,
                       data: CreateTaskSchema,
                       service: task_service,
-                      csrf_protect: CsrfProtect = Depends()
-                      ) -> CreateTaskActionData:
-    # await csrf_protect.validate_csrf(request)
-    if project_member.member.role_rel.create_tasks:
-        try:
-            action = await service.create_task(data, project_id, project_member.user)
-            await sio.emit('update_tasks_list', data=action.created_task, to=f'project_{project_id}')
-            return action
-        except (SQLAlchemyError, PostgresError) as e:
-            raise HTTPException(status_code=500, detail=str(e))
-    else:
-        raise HTTPException(status_code=403, detail="No access")
+                      member=Depends(partial(required_rights, rights=['create_tasks']))) -> CreateTaskActionData:
+    try:
+        action = await service.create_task(data, project_id, member.user)
+        await sio.emit('update_tasks_list', data=action.created_task, to=f'project_{project_id}')
+        return action
+    except (SQLAlchemyError, PostgresError) as e:
+        raise HTTPException(status_code=500, detail="Ошибка. Проверьте корректность введенных данных")
 
 
 @router.put('/project/{project_id}/update/{task_id}')
 async def update_task(
-        project_member: project_context,
         project_id: int,
         task_id: int,
         service: task_service,
         data: UpdateTaskSchema,
-        csrf_protect: CsrfProtect = Depends()
-) -> ChangeTaskActionData:
-    # await csrf_protect.validate_csrf(request)
-    if project_member.member.role_rel.update_tasks:
-        try:
-            res = await service.update_task(data, task_id, project_id, project_member.user)
+        member=Depends(partial(required_rights, rights=['update_tasks']))) -> ChangeTaskActionData:
+    try:
+        res = await service.update_task(data, task_id, project_id, member.user)
 
-            await sio.emit('update_tasks_list', data=res.new_data, to=f'project_{project_id}')
-            return res
-        except KeyError:
-            raise HTTPException(status_code=404, detail="Похоже, задачи больше не существует")
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Ошибка изменения: старые и новые данные совпадают")
-    else:
-        raise HTTPException(status_code=403, detail="No access")
+        await sio.emit('update_tasks_list', data=res.new_data, to=f'project_{project_id}')
+        return res
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Похоже, задачи больше не существует")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Ошибка изменения: старые и новые данные совпадают")
 
 
 @router.delete('/project/{project_id}/delete/{task_id}')
-async def delete_task(request: Request,
-                      context: project_context,
-                      project_id: int,
+async def delete_task(project_id: int,
                       task_id: int,
                       service: task_service,
-                      csrf_protect: CsrfProtect = Depends()) -> DeleteTaskActionData:
-    if context is None:
-        raise HTTPException(status_code=401, detail='No authorized')
-    # await csrf_protect.validate_csrf(request)
-    if context.member.role_rel.delete_tasks:
-        try:
-            action = await service.delete_task(task_id, project_id, context.user)
-            await sio.emit('delete_task', data={'task_id': task_id}, to=f'project_{project_id}')
-            return action
-        except (SQLAlchemyError, PostgresError) as e:
-            raise HTTPException(status_code=500, detail=str(e))
-    else:
-        raise HTTPException(status_code=403, detail="No access")
+                      member=Depends(partial(required_rights, rights=['delete_tasks']))) -> DeleteTaskActionData:
+    try:
+        action = await service.delete_task(task_id, project_id, member.user)
+        await sio.emit('delete_task', data={'task_id': task_id}, to=f'project_{project_id}')
+        return action
+    except (SQLAlchemyError, PostgresError) as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get('/project/{project_id}/get/{task_id}')
-async def get_task(context: project_context,
-                   project_id: int,
+async def get_task(project_id: int,
                    task_id: int,
-                   service: task_service) -> TaskGetSchema:
-    if context is None:
-        raise HTTPException(status_code=401, detail='Not authorized')
+                   service: task_service,
+                   is_member: project_context) -> TaskGetSchema:
     try:
         task = await service.get_task(task_id, project_id)
         return task

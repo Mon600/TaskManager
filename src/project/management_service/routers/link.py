@@ -1,44 +1,34 @@
+from functools import partial
 
 from asyncpg import PostgresError
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi_csrf_protect import CsrfProtect
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
-from starlette.requests import Request
 
-from src.shared.dependencies.service_deps import link_service, members_service
-from src.shared.dependencies.user_deps import current_user, project_context
 from src.project.management_service.mongo.db.models import LinkDeleteActionData, UserJoinActionData
+from src.shared.dependencies.service_deps import link_service, members_service
+from src.shared.dependencies.user_deps import current_user, required_rights
 from src.shared.schemas.Link_schemas import LinkSchema, GetLinksSchema, GetLinkSchema
 
 router = APIRouter(prefix='/links', tags=['Links'])
 
 
 @router.post('/{project_id}/generate')
-async def generate_url(project_member: project_context,
-                       service: link_service,
+async def generate_url(service: link_service,
                        data: LinkSchema,
                        project_id: int,
-                       csrf_protect: CsrfProtect = Depends()
-                       ):
-
-    # await csrf_protect.validate_csrf(request)
-    if not project_member.member.role_rel.generate_url:
-        raise HTTPException(status_code=403, detail="No access")
-    link = await service.generate(data, project_id, project_member.user)
+                       member=Depends(partial(required_rights, rights=['generate_url']))):
+    link = await service.generate(data, project_id, member.user)
     return {"ok": True, "detail": link}
 
 
 @router.get('/invite/{code}')
-async def invite_page(request: Request,
-                      user: current_user,
+async def invite_page(user: current_user,
                       service: link_service,
                       code: str) -> GetLinkSchema:
-    if user is None:
-        raise HTTPException(status_code=401, detail="No authorized")
     try:
         link_info = await service.get_project_by_code(code)
         if link_info.project_rel.status != 'open':
-            raise HTTPException(status_code=403, detail="No access: Проект закрыт")
+            raise HTTPException(status_code=403, detail="No access")
         return link_info
     except KeyError:
         raise HTTPException(status_code=404, detail="Ссылка не найдена или устарела.")
@@ -49,10 +39,7 @@ async def invite_page(request: Request,
 @router.post('/invite/{code}/accept')
 async def accept_invite(user: current_user,
                         service: members_service,
-                        code: str
-                        ) -> UserJoinActionData:
-    if user is None:
-        raise HTTPException(status_code=401, detail="Not authorized")
+                        code: str) -> UserJoinActionData:
     try:
         action = await service.add_member(code, user)
         return action
@@ -68,14 +55,13 @@ async def accept_invite(user: current_user,
 
 
 @router.get('/{project_id}/links')
-async def project_links(context: project_context,
-                        service: link_service,
-                        project_id: int
-                        ) -> list[GetLinksSchema]:
-    if not context:
-        raise HTTPException(401, "Not authorized")
-    if not context.member.role_rel.manage_links:
-        raise HTTPException(403, "No access")
+async def project_links(service: link_service,
+                        project_id: int,
+                        member=Depends(
+                            partial(
+                                required_rights,
+                                rights=["manage_links"]
+                            ))) -> list[GetLinksSchema]:
     try:
         links = await service.get_links(project_id)
         if not links:
@@ -86,30 +72,32 @@ async def project_links(context: project_context,
 
 
 @router.delete("/{project_id}/clear", status_code=200)
-async def delete_all_links(context: project_context,
-                           service: link_service,
-                           project_id: int
-                           ):
-    if not context:
-        raise HTTPException(status_code=401, detail='Not authorized')
-    if not context.member.role_rel.manage_links:
-        raise HTTPException(status_code=403, detail='No access')
+async def delete_all_links(service: link_service,
+                           project_id: int,
+                           member=Depends(
+                               partial(
+                                   required_rights,
+                                   rights=["manage_links"]
+                               ))):
     try:
-        result = await service.delete_all_links(project_id, context.user)
+        result = await service.delete_all_links(project_id, member.user)
         return result
     except KeyError:
         raise HTTPException(404, "Links no found")
 
 
 @router.delete('/{project_id}/{link_code}/delete')
-async def delete_link_by_code(project_member: project_context,
-                              project_id: int,
+async def delete_link_by_code(project_id: int,
                               service: link_service,
-                              link_code: str) -> LinkDeleteActionData:
-    if not project_member.member.role_rel.manage_links:
-        raise HTTPException(status_code=403, detail='No access')
+                              link_code: str,
+                              member=Depends(
+                                  partial(
+                                      required_rights,
+                                      rights=["manage_links"]
+                                  ))
+                              ) -> LinkDeleteActionData:
     try:
-        action = await service.delete_link_by_code(link_code, project_id, project_member.user)
+        action = await service.delete_link_by_code(link_code, project_id, member.user)
         return action
     except SQLAlchemyError as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -26,7 +26,7 @@ async def login_page(request: Request, user: current_user):
 
 @router.get('/login')
 async def login(request: Request, service: auth_service):
-    redirect_uri = "http://127.0.0.1:8002/auth/github/callback"
+    redirect_uri = "http://127.0.0.1:8000/auth/github/callback"
     return await service.oauth.github.authorize_redirect(request, redirect_uri)
 
 
@@ -69,8 +69,7 @@ async def callback(request: Request, service: auth_service):
             httponly=True,
             samesite="lax"
         )
-        response.headers["Location"] = "http://localhost:3000/auth/success"
-        response.status_code = 302
+
         return response
     except Exception as e:
         raise HTTPException(
